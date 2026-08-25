@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import jwt from 'jsonwebtoken';
+import { Prisma } from '../../generated/prisma/client.js';
 import { AppError } from '../errors/app-error.js';
 
 export const errorHandler = (
@@ -30,6 +31,26 @@ export const errorHandler = (
       details: formattedErrors,
     });
     return;
+  }
+
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError ||
+    (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002')
+  ) {
+    const prismaErr = err as Prisma.PrismaClientKnownRequestError;
+    if (prismaErr.code === 'P2002') {
+      const target = prismaErr.meta?.target;
+      const targetStr = Array.isArray(target)
+        ? target.join(', ')
+        : typeof target === 'string'
+        ? target
+        : 'field';
+      res.status(409).json({
+        success: false,
+        message: `Unique constraint violation: resource with this ${targetStr} already exists`,
+      });
+      return;
+    }
   }
 
   if (err instanceof jwt.TokenExpiredError) {
@@ -63,4 +84,5 @@ export const errorHandler = (
     message: 'Internal server error',
   });
 };
+
 

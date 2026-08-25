@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import authRoutes from './modules/auth/auth.routes.js';
+import productRoutes from './modules/products/product.routes.js';
 import { notFoundHandler } from './core/middlewares/not-found.middleware.js';
 import { errorHandler } from './core/middlewares/error.middleware.js';
 
@@ -21,6 +22,9 @@ app.get('/api/health', (_req, res) => {
 
 // Authentication routes
 app.use('/api/auth', authRoutes);
+
+// Product & Stock routes
+app.use('/api/products', productRoutes);
 
 // 404 handler for unmatched routes
 app.use(notFoundHandler);

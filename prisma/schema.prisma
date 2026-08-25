@@ -12,14 +12,71 @@ enum Role {
   SALESMAN
 }
 
+enum Unit {
+  KG
+  GRAM
+  LITRE
+  ML
+  PIECE
+  PACKET
+  BOX
+}
+
+enum StockTransactionType {
+  OPENING_STOCK
+  STOCK_IN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+}
+
 model User {
-  id           Int      @id @default(autoincrement())
-  username     String   @unique
-  passwordHash String   @map("password_hash")
-  role         Role
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                Int                @id @default(autoincrement())
+  username          String             @unique
+  passwordHash      String             @map("password_hash")
+  role              Role
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  stockTransactions StockTransaction[]
 
   @@map("users")
+}
+
+model Product {
+  id                Int                @id @default(autoincrement())
+  productCode       String             @unique @map("product_code")
+  barcode           String?            @unique
+  productName       String             @map("product_name")
+  tamilName         String?            @map("tamil_name")
+  unit              Unit
+  originalRate      Decimal            @default(0.00) @map("original_rate") @db.Decimal(12, 2)
+  normalRate        Decimal            @default(0.00) @map("normal_rate") @db.Decimal(12, 2)
+  retailRate        Decimal            @default(0.00) @map("retail_rate") @db.Decimal(12, 2)
+  functionRate      Decimal            @default(0.00) @map("function_rate") @db.Decimal(12, 2)
+  currentStock      Decimal            @default(0.000) @map("current_stock") @db.Decimal(12, 3)
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  stockTransactions StockTransaction[]
+
+  @@map("products")
+}
+
+model StockTransaction {
+  id            Int                  @id @default(autoincrement())
+  productId     Int                  @map("product_id")
+  type          StockTransactionType
+  quantity      Decimal              @db.Decimal(12, 3)
+  previousStock Decimal              @map("previous_stock") @db.Decimal(12, 3)
+  newStock      Decimal              @map("new_stock") @db.Decimal(12, 3)
+  createdBy     Int                  @map("created_by")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  note          String?
+
+  product Product @relation(fields: [productId], references: [id])
+  creator User    @relation(fields: [createdBy], references: [id])
+
+  @@index([productId])
+  @@index([createdBy])
+  @@map("stock_transactions")
 }
