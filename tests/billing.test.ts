@@ -1046,5 +1046,747 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
     await prisma.bill.deleteMany({ where: { billNumber: { startsWith: testPrefix } } });
     await prisma.billSequence.deleteMany({ where: { prefix: testPrefix } });
   });
+
+  /* -------------------------------------------------------------------------- */
+  /* PHASE 4: BILL CANCELLATION + AUTOMATIC STOCK RESTORATION TESTS             */
+  /* -------------------------------------------------------------------------- */
+
+  let testCancelProdId: number;
+  let testCancelBillId: number;
+  let adminUserId: number;
+
+  it('Phase 4 Setup: Fetch admin user record and create dedicated product for cancellation tests', async () => {
+    const userRec = await prisma.user.findUniqueOrThrow({ where: { username: adminUser.username } });
+    adminUserId = userRec.id;
+
+    const prod = await prisma.product.create({
+      data: {
+        productCode: 'CAN-PROD-01',
+        productName: 'Turmeric Powder',
+        unit: Unit.PACKET,
+        originalRate: '20.00',
+        normalRate: '35.00',
+        retailRate: '32.00',
+        functionRate: '30.00',
+        currentStock: '20.000',
+        active: true,
+      },
+    });
+    testCancelProdId = prod.id;
+  });
+
+  it('P4 - 1, 4, 5, 6, 7. ADMIN cancels completed bill successfully, restores stock, sets audit fields', async () => {
+    // 1. Create a bill selling 3.000 units (stock 20.000 -> 17.000)
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${salesmanToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [{ productId: testCancelProdId, quantity: '3.000' }],
+      }),
+    });
+    const billData = await billRes.json();
+    assert.strictEqual(billRes.status, 201);
+    testCancelBillId = billData.data.bill.id;
+
+    const prodAfterSale = await prisma.product.findUniqueOrThrow({ where: { id: testCancelProdId } });
+    assert.strictEqual(formatQuantity(prodAfterSale.currentStock), '17.000');
+
+    // 2. Admin cancels the bill
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${testCancelBillId}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+    });
+    const cancelData = await cancelRes.json();
+
+    // 3. Verify HTTP 200 and serialized response
+    assert.strictEqual(cancelRes.status, 200);
+    assert.strictEqual(cancelData.success, true);
+    assert.strictEqual(cancelData.message, 'Bill cancelled successfully');
+    assert.strictEqual(cancelData.data.bill.id, testCancelBillId);
+    assert.strictEqual(cancelData.data.bill.status, BillStatus.CANCELLED);
+    assert.ok(cancelData.data.bill.cancelledAt, 'cancelledAt must be populated');
+    assert.strictEqual(cancelData.data.bill.cancelledBy, adminUserId);
+    assert.strictEqual(cancelData.data.bill.canceller.id, adminUserId);
+    assert.strictEqual(cancelData.data.bill.canceller.username, adminUser.username);
+    assert.strictEqual(cancelData.data.bill.canceller.role, Role.ADMIN);
+    assert.strictEqual((cancelData.data.bill.canceller as any).passwordHash, undefined);
+
+    // 4. Verify product stock restored to exact original quantity (17.000 + 3.000 = 20.000)
+    const prodAfterCancel = await prisma.product.findUniqueOrThrow({ where: { id: testCancelProdId } });
+    assert.strictEqual(formatQuantity(prodAfterCancel.currentStock), '20.000');
+  });
+
+  it('P4 - 2. SALESMAN cannot cancel bill (403 Forbidden)', async () => {
+    // Create a new bill
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${salesmanToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [{ productId: testCancelProdId, quantity: '1.000' }],
+      }),
+    });
+    const billData = await billRes.json();
+    assert.strictEqual(billRes.status, 201);
+    const billId = billData.data.bill.id;
+
+    // Salesman attempts cancellation
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${salesmanToken}`,
+      },
+    });
+    const cancelData = await cancelRes.json();
+    assert.strictEqual(cancelRes.status, 403);
+    assert.strictEqual(cancelData.success, false);
+    assert.match(cancelData.message, /insufficient role permissions/i);
+
+    // Verify bill status remains COMPLETED
+    const billInDb = await prisma.bill.findUniqueOrThrow({ where: { id: billId } });
+    assert.strictEqual(billInDb.status, BillStatus.COMPLETED);
+    assert.strictEqual(billInDb.cancelledAt, null);
+    assert.strictEqual(billInDb.cancelledBy, null);
+  });
+
+  it('P4 - 3. unauthenticated request cannot cancel bill (401 Unauthorized)', async () => {
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${testCancelBillId}/cancel`, {
+      method: 'POST',
+    });
+    const cancelData = await cancelRes.json();
+    assert.strictEqual(cancelRes.status, 401);
+    assert.strictEqual(cancelData.success, false);
+  });
+
+  it('P4 - 8, 9, 10, 11. Fractional quantity cancellation restores exact stock & creates valid SALE_CANCEL ledger', async () => {
+    const fracProd = await prisma.product.create({
+      data: {
+        productCode: 'CAN-FRAC-PROD-01',
+        productName: 'Premium Cardamom',
+        unit: Unit.KG,
+        originalRate: '1500.00',
+        normalRate: '2000.00',
+        retailRate: '1900.00',
+        functionRate: '1800.00',
+        currentStock: '10.000',
+        active: true,
+      },
+    });
+
+    // Create bill with fractional quantity: 2.375 KG (stock: 10.000 -> 7.625)
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${salesmanToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [{ productId: fracProd.id, quantity: '2.375' }],
+      }),
+    });
+    const billData = await billRes.json();
+    const billId = billData.data.bill.id;
+    const billNumber = billData.data.bill.billNumber;
+
+    const prodMid = await prisma.product.findUniqueOrThrow({ where: { id: fracProd.id } });
+    assert.strictEqual(formatQuantity(prodMid.currentStock), '7.625');
+
+    // Cancel the fractional bill
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+      },
+    });
+    assert.strictEqual(cancelRes.status, 200);
+
+    // Stock restored to exactly 10.000
+    const prodFinal = await prisma.product.findUniqueOrThrow({ where: { id: fracProd.id } });
+    assert.strictEqual(formatQuantity(prodFinal.currentStock), '10.000');
+
+    // Verify stock transactions: exactly 1 SALE and 1 SALE_CANCEL
+    const txs = await prisma.stockTransaction.findMany({
+      where: { billId },
+      orderBy: { id: 'asc' },
+    });
+    assert.strictEqual(txs.length, 2);
+
+    // 11. Original SALE ledger remains unchanged
+    const saleTx = txs[0];
+    assert.strictEqual(saleTx.type, StockTransactionType.SALE);
+    assert.strictEqual(formatQuantity(saleTx.quantity), '2.375');
+    assert.strictEqual(formatQuantity(saleTx.previousStock), '10.000');
+    assert.strictEqual(formatQuantity(saleTx.newStock), '7.625');
+    assert.strictEqual(saleTx.billId, billId);
+
+    // 9 & 10. SALE_CANCEL ledger entry details
+    const cancelTx = txs[1];
+    assert.strictEqual(cancelTx.type, StockTransactionType.SALE_CANCEL);
+    assert.strictEqual(formatQuantity(cancelTx.quantity), '2.375');
+    assert.strictEqual(formatQuantity(cancelTx.previousStock), '7.625');
+    assert.strictEqual(formatQuantity(cancelTx.newStock), '10.000');
+    assert.strictEqual(cancelTx.createdBy, adminUserId);
+    assert.strictEqual(cancelTx.billId, billId);
+    assert.ok(cancelTx.note?.includes(billNumber));
+  });
+
+  it('P4 - 12, 13. BillItems snapshots and bill financial totals remain immutable after cancellation', async () => {
+    // Create multi-item bill
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${salesmanToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.UPI,
+        items: [
+          { productId: prodRiceId, quantity: '2.000' },
+          { productId: prodDalId, quantity: '1.500' },
+        ],
+      }),
+    });
+    const billData = await billRes.json();
+    const billId = billData.data.bill.id;
+    const originalSubtotal = billData.data.bill.subtotal;
+    const originalTotalAmount = billData.data.bill.totalAmount;
+    const originalItems = billData.data.bill.items;
+
+    // Cancel bill
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const cancelData = await cancelRes.json();
+    assert.strictEqual(cancelRes.status, 200);
+
+    const cancelledBill = cancelData.data.bill;
+    assert.strictEqual(cancelledBill.subtotal, originalSubtotal);
+    assert.strictEqual(cancelledBill.totalAmount, originalTotalAmount);
+    assert.strictEqual(cancelledBill.rateType, RateType.NORMAL);
+    assert.strictEqual(cancelledBill.paymentType, PaymentType.UPI);
+    assert.strictEqual(cancelledBill.items.length, 2);
+
+    for (let i = 0; i < originalItems.length; i++) {
+      const orig = originalItems[i];
+      const canc = cancelledBill.items[i];
+      assert.strictEqual(canc.productId, orig.productId);
+      assert.strictEqual(canc.productCode, orig.productCode);
+      assert.strictEqual(canc.productName, orig.productName);
+      assert.strictEqual(canc.unit, orig.unit);
+      assert.strictEqual(canc.quantity, orig.quantity);
+      assert.strictEqual(canc.rateType, orig.rateType);
+      assert.strictEqual(canc.rate, orig.rate);
+      assert.strictEqual(canc.amount, orig.amount);
+    }
+  });
+
+  it('P4 - 14. cancelling a non-existent bill returns 404', async () => {
+    const res = await fetch(`${baseUrl}/api/bills/999999/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const data = await res.json();
+    assert.strictEqual(res.status, 404);
+    assert.strictEqual(data.success, false);
+    assert.match(data.message, /not found/i);
+  });
+
+  it('P4 - 15, 16. cancelling an already CANCELLED bill returns controlled conflict (409) and does not restore stock again', async () => {
+    const prod = await prisma.product.create({
+      data: {
+        productCode: 'CAN-SEQ-DOUBLE-01',
+        productName: 'Cumin Seeds',
+        unit: Unit.KG,
+        originalRate: '200.00',
+        normalRate: '260.00',
+        retailRate: '250.00',
+        functionRate: '240.00',
+        currentStock: '10.000',
+        active: true,
+      },
+    });
+
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [{ productId: prod.id, quantity: '2.000' }],
+      }),
+    });
+    const billData = await billRes.json();
+    const billId = billData.data.bill.id;
+
+    // First cancel (succeeds)
+    const cancel1 = await fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.strictEqual(cancel1.status, 200);
+
+    const stockAfterFirstCancel = await prisma.product.findUniqueOrThrow({ where: { id: prod.id } });
+    assert.strictEqual(formatQuantity(stockAfterFirstCancel.currentStock), '10.000');
+
+    // Sequential second cancel (must fail with 409 Conflict)
+    const cancel2 = await fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const cancel2Data = await cancel2.json();
+    assert.strictEqual(cancel2.status, 409);
+    assert.strictEqual(cancel2Data.success, false);
+    assert.match(cancel2Data.message, /already cancelled/i);
+
+    // Stock must remain 10.000 (NOT 12.000!)
+    const stockAfterSecondCancel = await prisma.product.findUniqueOrThrow({ where: { id: prod.id } });
+    assert.strictEqual(formatQuantity(stockAfterSecondCancel.currentStock), '10.000');
+
+    // Exactly one SALE_CANCEL transaction exists
+    const cancelTxs = await prisma.stockTransaction.findMany({
+      where: { billId, type: StockTransactionType.SALE_CANCEL },
+    });
+    assert.strictEqual(cancelTxs.length, 1);
+  });
+
+  it('P4 - 17. concurrent double cancellation: exactly one 200 and one 409, stock restored once', async () => {
+    const prod = await prisma.product.create({
+      data: {
+        productCode: 'CAN-CONC-DOUBLE-01',
+        productName: 'Fenugreek Seeds',
+        unit: Unit.KG,
+        originalRate: '80.00',
+        normalRate: '110.00',
+        retailRate: '105.00',
+        functionRate: '100.00',
+        currentStock: '10.000',
+        active: true,
+      },
+    });
+
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [{ productId: prod.id, quantity: '3.000' }],
+      }),
+    });
+    const billData = await billRes.json();
+    const billId = billData.data.bill.id;
+
+    // Fire 2 concurrent cancellation requests simultaneously
+    const reqA = fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const reqB = fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+
+    const [resA, resB] = await Promise.all([reqA, reqB]);
+    const statuses = [resA.status, resB.status].sort();
+
+    // Exactly one 200 OK and one 409 Conflict
+    assert.deepStrictEqual(statuses, [200, 409]);
+
+    // Stock must be restored exactly once (10.000 - 3.000 + 3.000 = 10.000, NOT 13.000)
+    const finalProd = await prisma.product.findUniqueOrThrow({ where: { id: prod.id } });
+    assert.strictEqual(formatQuantity(finalProd.currentStock), '10.000');
+
+    // Exactly one SALE_CANCEL ledger entry
+    const cancelTxs = await prisma.stockTransaction.findMany({
+      where: { billId, type: StockTransactionType.SALE_CANCEL },
+    });
+    assert.strictEqual(cancelTxs.length, 1);
+
+    // Bill status is CANCELLED
+    const billInDb = await prisma.bill.findUniqueOrThrow({ where: { id: billId } });
+    assert.strictEqual(billInDb.status, BillStatus.CANCELLED);
+  });
+
+  it('P4 - 18. multi-product cancellation restores stock for every item atomically', async () => {
+    const p1 = await prisma.product.create({
+      data: {
+        productCode: 'CAN-MULTI-01',
+        productName: 'Multi Item 1',
+        unit: Unit.KG,
+        normalRate: '50.00',
+        currentStock: '10.000',
+        active: true,
+      },
+    });
+    const p2 = await prisma.product.create({
+      data: {
+        productCode: 'CAN-MULTI-02',
+        productName: 'Multi Item 2',
+        unit: Unit.LITRE,
+        normalRate: '120.00',
+        currentStock: '15.000',
+        active: true,
+      },
+    });
+    const p3 = await prisma.product.create({
+      data: {
+        productCode: 'CAN-MULTI-03',
+        productName: 'Multi Item 3',
+        unit: Unit.PIECE,
+        normalRate: '25.00',
+        currentStock: '30.000',
+        active: true,
+      },
+    });
+
+    // Create bill with 3 items
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [
+          { productId: p1.id, quantity: '2.000' },
+          { productId: p2.id, quantity: '3.000' },
+          { productId: p3.id, quantity: '5.000' },
+        ],
+      }),
+    });
+    const billData = await billRes.json();
+    const billId = billData.data.bill.id;
+
+    // Verify stock deducted
+    assert.strictEqual(formatQuantity((await prisma.product.findUniqueOrThrow({ where: { id: p1.id } })).currentStock), '8.000');
+    assert.strictEqual(formatQuantity((await prisma.product.findUniqueOrThrow({ where: { id: p2.id } })).currentStock), '12.000');
+    assert.strictEqual(formatQuantity((await prisma.product.findUniqueOrThrow({ where: { id: p3.id } })).currentStock), '25.000');
+
+    // Cancel the multi-item bill
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.strictEqual(cancelRes.status, 200);
+
+    // Verify all 3 products restored
+    assert.strictEqual(formatQuantity((await prisma.product.findUniqueOrThrow({ where: { id: p1.id } })).currentStock), '10.000');
+    assert.strictEqual(formatQuantity((await prisma.product.findUniqueOrThrow({ where: { id: p2.id } })).currentStock), '15.000');
+    assert.strictEqual(formatQuantity((await prisma.product.findUniqueOrThrow({ where: { id: p3.id } })).currentStock), '30.000');
+
+    // Exactly 3 SALE_CANCEL ledger entries
+    const cancelTxs = await prisma.stockTransaction.findMany({
+      where: { billId, type: StockTransactionType.SALE_CANCEL },
+    });
+    assert.strictEqual(cancelTxs.length, 3);
+  });
+
+  it('P4 - 19. failed multi-product cancellation rolls back all changes atomically', async () => {
+    // 1. Create a valid product
+    const validProd = await prisma.product.create({
+      data: {
+        productCode: 'CAN-ROLLBACK-VALID',
+        productName: 'Rollback Valid Product',
+        unit: Unit.KG,
+        normalRate: '50.00',
+        currentStock: '8.000',
+        active: true,
+      },
+    });
+
+    // 2. Create a bill with two items: Item 1 is valid, Item 2 points to a non-existent product ID
+    // We insert via raw SQL bypassing foreign key checks in a transaction to simulate mid-transaction failure
+    const billNumber = 'BILL-ROLLBACK-TEST-0001';
+    await prisma.$executeRaw`
+      INSERT INTO bills (bill_number, rate_type, payment_type, subtotal, total_amount, status, created_by, created_at, updated_at)
+      VALUES (${billNumber}, 'NORMAL', 'CASH', 100.00, 100.00, 'COMPLETED', ${adminUserId}, NOW(3), NOW(3))
+    `;
+    const [billRow] = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id FROM bills WHERE bill_number = ${billNumber}
+    `;
+    const testRollbackBillId = billRow.id;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET FOREIGN_KEY_CHECKS = 0`;
+      await tx.$executeRaw`
+        INSERT INTO bill_items (bill_id, product_id, product_code, product_name, unit, quantity, rate_type, rate, amount, created_at)
+        VALUES (${testRollbackBillId}, ${validProd.id}, 'CAN-ROLLBACK-VALID', 'Rollback Valid Product', 'KG', 2.000, 'NORMAL', 50.00, 100.00, NOW(3)),
+               (${testRollbackBillId}, 999998, 'CAN-NONEXISTENT', 'Missing Product', 'KG', 1.000, 'NORMAL', 50.00, 50.00, NOW(3))
+      `;
+      await tx.$executeRaw`SET FOREIGN_KEY_CHECKS = 1`;
+    });
+
+    // 3. Attempt cancellation - will fail on second item because product 999998 does not exist
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${testRollbackBillId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.strictEqual(cancelRes.status, 404);
+
+    // 4. Verify validProd stock was NOT modified (atomicity rollback!)
+    const validProdAfter = await prisma.product.findUniqueOrThrow({ where: { id: validProd.id } });
+    assert.strictEqual(formatQuantity(validProdAfter.currentStock), '8.000');
+
+    // 5. Verify no SALE_CANCEL transactions exist
+    const cancelTxs = await prisma.stockTransaction.findMany({
+      where: { billId: testRollbackBillId, type: StockTransactionType.SALE_CANCEL },
+    });
+    assert.strictEqual(cancelTxs.length, 0);
+
+    // 6. Verify bill status remained COMPLETED
+    const billAfter = await prisma.bill.findUniqueOrThrow({ where: { id: testRollbackBillId } });
+    assert.strictEqual(billAfter.status, BillStatus.COMPLETED);
+
+    // Cleanup
+    await prisma.$executeRaw`SET FOREIGN_KEY_CHECKS = 0`;
+    await prisma.billItem.deleteMany({ where: { billId: testRollbackBillId } });
+    await prisma.bill.delete({ where: { id: testRollbackBillId } });
+    await prisma.$executeRaw`SET FOREIGN_KEY_CHECKS = 1`;
+  });
+
+  it('P4 - 20. product becoming inactive after sale does not prevent cancellation and restores stock', async () => {
+    const prod = await prisma.product.create({
+      data: {
+        productCode: 'CAN-INACTIVE-RESTORE',
+        productName: 'Seasonal Mango Pickle',
+        unit: Unit.PACKET,
+        originalRate: '40.00',
+        normalRate: '60.00',
+        retailRate: '55.00',
+        functionRate: '50.00',
+        currentStock: '10.000',
+        active: true,
+      },
+    });
+
+    // Create bill (stock 10.000 -> 6.000)
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [{ productId: prod.id, quantity: '4.000' }],
+      }),
+    });
+    const billData = await billRes.json();
+    const billId = billData.data.bill.id;
+
+    // Deactivate product
+    await prisma.product.update({
+      where: { id: prod.id },
+      data: { active: false },
+    });
+
+    // Cancel bill on inactive product
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.strictEqual(cancelRes.status, 200);
+
+    // Stock must be restored to 10.000 while product remains inactive
+    const prodAfter = await prisma.product.findUniqueOrThrow({ where: { id: prod.id } });
+    assert.strictEqual(formatQuantity(prodAfter.currentStock), '10.000');
+    assert.strictEqual(prodAfter.active, false);
+  });
+
+  it('P4 - 21. post-sale stock changes are preserved correctly (currentStock + quantity rule)', async () => {
+    // 1. Initial Opening stock = 10.000
+    const prod = await prisma.product.create({
+      data: {
+        productCode: 'CAN-POST-SALE-STOCK',
+        productName: 'Asafoetida Compounded',
+        unit: Unit.BOX,
+        originalRate: '50.00',
+        normalRate: '75.00',
+        retailRate: '70.00',
+        functionRate: '65.00',
+        currentStock: '10.000',
+        active: true,
+      },
+    });
+
+    // 2. Bill sells 3.000 -> remaining stock = 7.000
+    const billRes = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [{ productId: prod.id, quantity: '3.000' }],
+      }),
+    });
+    const billData = await billRes.json();
+    const billId = billData.data.bill.id;
+
+    const stockAfterSale = await prisma.product.findUniqueOrThrow({ where: { id: prod.id } });
+    assert.strictEqual(formatQuantity(stockAfterSale.currentStock), '7.000');
+
+    // 3. Admin performs stock-in +5.000 -> current stock = 12.000
+    const stockInRes = await fetch(`${baseUrl}/api/products/${prod.id}/stock-in`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        quantity: '5.000',
+        note: 'Supplier delivery batch 2',
+      }),
+    });
+    assert.strictEqual(stockInRes.status, 200);
+
+    const stockAfterStockIn = await prisma.product.findUniqueOrThrow({ where: { id: prod.id } });
+    assert.strictEqual(formatQuantity(stockAfterStockIn.currentStock), '12.000');
+
+    // 4. Cancel the bill
+    const cancelRes = await fetch(`${baseUrl}/api/bills/${billId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.strictEqual(cancelRes.status, 200);
+
+    // 5. Final stock MUST equal 12.000 + 3.000 = 15.000 (NOT reset back to 10.000!)
+    const stockFinal = await prisma.product.findUniqueOrThrow({ where: { id: prod.id } });
+    assert.strictEqual(formatQuantity(stockFinal.currentStock), '15.000');
+
+    // Verify SALE_CANCEL transaction recorded previousStock = 12.000 and newStock = 15.000
+    const cancelTx = await prisma.stockTransaction.findFirstOrThrow({
+      where: { billId, type: StockTransactionType.SALE_CANCEL },
+    });
+    assert.strictEqual(formatQuantity(cancelTx.previousStock), '12.000');
+    assert.strictEqual(formatQuantity(cancelTx.newStock), '15.000');
+  });
+
+  it('P4 - 22. concurrent cancellation and sale on the same product do not corrupt stock', async () => {
+    // Product stock = 10.000
+    const prod = await prisma.product.create({
+      data: {
+        productCode: 'CAN-CONC-SALE-CANCEL',
+        productName: 'Mustard Seeds',
+        unit: Unit.KG,
+        originalRate: '70.00',
+        normalRate: '90.00',
+        retailRate: '85.00',
+        functionRate: '80.00',
+        currentStock: '10.000',
+        active: true,
+      },
+    });
+
+    // Bill 1 sells 3.000 -> stock becomes 7.000
+    const bill1Res = await fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.CASH,
+        items: [{ productId: prod.id, quantity: '3.000' }],
+      }),
+    });
+    const bill1Data = await bill1Res.json();
+    const bill1Id = bill1Data.data.bill.id;
+
+    // Simultaneously fire:
+    // Request 1: Cancel Bill 1 (+3.000)
+    // Request 2: Create Bill 2 selling 2.000 (-2.000)
+    const cancelReq = fetch(`${baseUrl}/api/bills/${bill1Id}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+
+    const saleReq = fetch(`${baseUrl}/api/bills`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${salesmanToken}`,
+      },
+      body: JSON.stringify({
+        rateType: RateType.NORMAL,
+        paymentType: PaymentType.UPI,
+        items: [{ productId: prod.id, quantity: '2.000' }],
+      }),
+    });
+
+    const [cancelRes, saleRes] = await Promise.all([cancelReq, saleReq]);
+    assert.strictEqual(cancelRes.status, 200);
+    assert.strictEqual(saleRes.status, 201);
+
+    // Final stock in DB must be exactly 7.000 + 3.000 - 2.000 = 8.000
+    const finalProd = await prisma.product.findUniqueOrThrow({ where: { id: prod.id } });
+    assert.strictEqual(formatQuantity(finalProd.currentStock), '8.000');
+  });
+
+  it('P4 - 23. bill detail returns CANCELLED status and cancellation audit fields without exposing passwordHash', async () => {
+    const res = await fetch(`${baseUrl}/api/bills/${testCancelBillId}`, {
+      headers: { Authorization: `Bearer ${salesmanToken}` },
+    });
+    const data = await res.json();
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(data.success, true);
+    assert.strictEqual(data.data.bill.id, testCancelBillId);
+    assert.strictEqual(data.data.bill.status, BillStatus.CANCELLED);
+    assert.ok(data.data.bill.cancelledAt);
+    assert.strictEqual(data.data.bill.cancelledBy, adminUserId);
+    assert.strictEqual(data.data.bill.canceller.id, adminUserId);
+    assert.strictEqual(data.data.bill.canceller.username, adminUser.username);
+    assert.strictEqual((data.data.bill.canceller as any).passwordHash, undefined);
+    assert.strictEqual((data.data.bill.creator as any).passwordHash, undefined);
+  });
+
+  it('P4 - 24. list API continues returning cancelled bills with status filter and cancellation metadata', async () => {
+    // Filter by CANCELLED
+    const res = await fetch(`${baseUrl}/api/bills?status=CANCELLED`, {
+      headers: { Authorization: `Bearer ${salesmanToken}` },
+    });
+    const data = await res.json();
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(data.success, true);
+    assert.ok(data.data.bills.length > 0);
+
+    for (const b of data.data.bills) {
+      assert.strictEqual(b.status, BillStatus.CANCELLED);
+      assert.ok(b.cancelledAt);
+      assert.ok(b.cancelledBy);
+      if (b.canceller) {
+        assert.strictEqual(b.canceller.passwordHash, undefined);
+      }
+    }
+  });
 });
 

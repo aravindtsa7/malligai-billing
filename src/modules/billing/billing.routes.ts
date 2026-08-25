@@ -38,4 +38,14 @@ router.get(
   }
 );
 
+// Cancel bill (ADMIN only)
+router.post(
+  '/:id/cancel',
+  authenticate,
+  authorizeRoles(Role.ADMIN),
+  (req, res, next) => {
+    billingController.cancelBill(req, res, next);
+  }
+);
+
 export default router;

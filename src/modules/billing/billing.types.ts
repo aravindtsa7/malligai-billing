@@ -30,9 +30,12 @@ export interface SerializedBill {
   totalAmount: string;
   status: BillStatus;
   createdBy: number;
+  cancelledAt?: Date | null;
+  cancelledBy?: number | null;
   createdAt: Date;
   updatedAt: Date;
   creator?: SerializedBillCreator;
+  canceller?: SerializedBillCreator | null;
   items?: SerializedBillItem[];
 }
 
@@ -111,9 +114,16 @@ export function serializeBill(bill: {
   totalAmount: unknown;
   status: BillStatus;
   createdBy: number;
+  cancelledAt?: Date | null;
+  cancelledBy?: number | null;
   createdAt: Date;
   updatedAt: Date;
   creator?: {
+    id: number;
+    username: string;
+    role: Role;
+  } | null;
+  canceller?: {
     id: number;
     username: string;
     role: Role;
@@ -141,6 +151,8 @@ export function serializeBill(bill: {
     totalAmount: formatRate(bill.totalAmount),
     status: bill.status,
     createdBy: bill.createdBy,
+    cancelledAt: bill.cancelledAt ?? null,
+    cancelledBy: bill.cancelledBy ?? null,
     createdAt: bill.createdAt,
     updatedAt: bill.updatedAt,
   };
@@ -150,6 +162,14 @@ export function serializeBill(bill: {
       id: bill.creator.id,
       username: bill.creator.username,
       role: bill.creator.role,
+    };
+  }
+
+  if (bill.canceller) {
+    result.canceller = {
+      id: bill.canceller.id,
+      username: bill.canceller.username,
+      role: bill.canceller.role,
     };
   }
 

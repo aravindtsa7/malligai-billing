@@ -1,6 +1,6 @@
 import { prisma } from '../../core/database/prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
-import { BadRequestError, NotFoundError } from '../../core/errors/app-error.js';
+import { BadRequestError, NotFoundError, ConflictError } from '../../core/errors/app-error.js';
 import {
   RateType,
   BillStatus,
@@ -240,6 +240,9 @@ export class BillingService {
           creator: {
             select: { id: true, username: true, role: true },
           },
+          canceller: {
+            select: { id: true, username: true, role: true },
+          },
         },
       }),
     ]);
@@ -265,6 +268,9 @@ export class BillingService {
         creator: {
           select: { id: true, username: true, role: true },
         },
+        canceller: {
+          select: { id: true, username: true, role: true },
+        },
       },
     });
 
@@ -273,6 +279,129 @@ export class BillingService {
     }
 
     return serializeBill(bill);
+  }
+
+  async cancelBill(id: number, adminUserId: number): Promise<SerializedBill> {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Lock the Bill row using SELECT ... FOR UPDATE
+      const billRows = await tx.$queryRaw<
+        Array<{
+          id: number;
+          bill_number: string;
+          status: BillStatus;
+        }>
+      >`
+        SELECT id, bill_number, status
+        FROM bills
+        WHERE id = ${id}
+        FOR UPDATE
+      `;
+
+      // 2. If Bill does not exist: return 404
+      if (!billRows || billRows.length === 0) {
+        throw new NotFoundError(`Bill with ID ${id} not found`);
+      }
+
+      const billRow = billRows[0];
+
+      // 3. If Bill.status is already CANCELLED: reject with controlled conflict (409)
+      if (billRow.status === BillStatus.CANCELLED) {
+        throw new ConflictError(`Bill "${billRow.bill_number}" is already cancelled`);
+      }
+
+      // 4. Load the immutable BillItems
+      const billItems = await tx.billItem.findMany({
+        where: { billId: id },
+      });
+
+      // 5. Determine all affected product IDs
+      const sortedProductIds = [...new Set(billItems.map((it) => it.productId))].sort((a, b) => a - b);
+
+      if (sortedProductIds.length > 0) {
+        // 6 & 7. Lock all Product rows in deterministic ascending ID order
+        const lockedProductRows = await tx.$queryRaw<
+          Array<{
+            id: number;
+            product_name: string;
+            current_stock: unknown;
+            active: number | boolean;
+          }>
+        >`
+          SELECT id, product_name, current_stock, active
+          FROM products
+          WHERE id IN (${Prisma.join(sortedProductIds)})
+          ORDER BY id ASC
+          FOR UPDATE
+        `;
+
+        // Maintain in-memory tracking of current stock per product
+        const stockMap = new Map<number, Prisma.Decimal>();
+        for (const p of lockedProductRows) {
+          stockMap.set(p.id, new Prisma.Decimal(String(p.current_stock)));
+        }
+
+        // 8 & 9. Restore stock and record SALE_CANCEL transaction for each item
+        for (const item of billItems) {
+          const currentStockDec = stockMap.get(item.productId);
+          if (!currentStockDec) {
+            throw new NotFoundError(`Product with ID ${item.productId} not found`);
+          }
+
+          const qtyDec = new Prisma.Decimal(String(item.quantity));
+          const newStockDec = currentStockDec.add(qtyDec);
+          stockMap.set(item.productId, newStockDec);
+
+          // Update Product currentStock (even if inactive)
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              currentStock: newStockDec.toFixed(3),
+            },
+          });
+
+          // Create SALE_CANCEL StockTransaction
+          await tx.stockTransaction.create({
+            data: {
+              productId: item.productId,
+              type: StockTransactionType.SALE_CANCEL,
+              quantity: qtyDec.toFixed(3),
+              previousStock: currentStockDec.toFixed(3),
+              newStock: newStockDec.toFixed(3),
+              createdBy: adminUserId,
+              billId: id,
+              note: `Cancellation of Bill #${billRow.bill_number}`,
+            },
+          });
+        }
+      }
+
+      // 10 & 11. Mark Bill.status = CANCELLED, set cancelledAt and cancelledBy
+      const cancelledAt = new Date();
+      await tx.bill.update({
+        where: { id },
+        data: {
+          status: BillStatus.CANCELLED,
+          cancelledAt,
+          cancelledBy: adminUserId,
+        },
+      });
+
+      // 12. Fetch complete cancelled bill with items and creator/canceller audit metadata
+      const updatedBill = await tx.bill.findUniqueOrThrow({
+        where: { id },
+        include: {
+          items: true,
+          creator: {
+            select: { id: true, username: true, role: true },
+          },
+          canceller: {
+            select: { id: true, username: true, role: true },
+          },
+        },
+      });
+
+      return serializeBill(updatedBill);
+    });
   }
 }
 

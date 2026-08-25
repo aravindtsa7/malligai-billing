@@ -28,6 +28,7 @@ enum StockTransactionType {
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
   SALE
+  SALE_CANCEL
 }
 
 enum RateType {
@@ -55,7 +56,8 @@ model User {
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   stockTransactions StockTransaction[]
-  bills             Bill[]
+  createdBills      Bill[]             @relation("BillCreator")
+  cancelledBills    Bill[]             @relation("BillCanceller")
 
   @@map("users")
 }
@@ -112,14 +114,18 @@ model Bill {
   totalAmount       Decimal            @map("total_amount") @db.Decimal(12, 2)
   status            BillStatus         @default(COMPLETED)
   createdBy         Int                @map("created_by")
+  cancelledAt       DateTime?          @map("cancelled_at")
+  cancelledBy       Int?               @map("cancelled_by")
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  creator           User               @relation(fields: [createdBy], references: [id])
+  creator           User               @relation("BillCreator", fields: [createdBy], references: [id])
+  canceller         User?              @relation("BillCanceller", fields: [cancelledBy], references: [id])
   items             BillItem[]
   stockTransactions StockTransaction[]
 
   @@index([createdBy])
+  @@index([cancelledBy])
   @@map("bills")
 }
 

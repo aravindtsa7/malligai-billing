@@ -53,6 +53,27 @@ export class BillingController {
       next(error);
     }
   }
+
+  async cancelBill(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new UnauthorizedError('Authentication required');
+      }
+
+      const { id } = billIdParamSchema.parse(req.params);
+      const bill = await billingService.cancelBill(id, req.user.id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Bill cancelled successfully',
+        data: {
+          bill,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const billingController = new BillingController();
