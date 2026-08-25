@@ -12,4 +12,3 @@ export const validateBody = (schema: ZodTypeAny) => {
     next();
   };
 };
-

@@ -27,6 +27,23 @@ enum StockTransactionType {
   STOCK_IN
   ADJUSTMENT_IN
   ADJUSTMENT_OUT
+  SALE
+}
+
+enum RateType {
+  NORMAL
+  RETAIL
+  FUNCTION
+}
+
+enum PaymentType {
+  CASH
+  UPI
+}
+
+enum BillStatus {
+  COMPLETED
+  CANCELLED
 }
 
 model User {
@@ -38,6 +55,7 @@ model User {
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   stockTransactions StockTransaction[]
+  bills             Bill[]
 
   @@map("users")
 }
@@ -58,6 +76,7 @@ model Product {
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   stockTransactions StockTransaction[]
+  billItems         BillItem[]
 
   @@map("products")
 }
@@ -72,11 +91,64 @@ model StockTransaction {
   createdBy     Int                  @map("created_by")
   createdAt     DateTime             @default(now()) @map("created_at")
   note          String?
+  billId        Int?                 @map("bill_id")
 
   product Product @relation(fields: [productId], references: [id])
   creator User    @relation(fields: [createdBy], references: [id])
+  bill    Bill?   @relation(fields: [billId], references: [id])
 
   @@index([productId])
   @@index([createdBy])
+  @@index([billId])
   @@map("stock_transactions")
+}
+
+model Bill {
+  id                Int                @id @default(autoincrement())
+  billNumber        String             @unique @map("bill_number")
+  rateType          RateType           @map("rate_type")
+  paymentType       PaymentType        @map("payment_type")
+  subtotal          Decimal            @db.Decimal(12, 2)
+  totalAmount       Decimal            @map("total_amount") @db.Decimal(12, 2)
+  status            BillStatus         @default(COMPLETED)
+  createdBy         Int                @map("created_by")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  creator           User               @relation(fields: [createdBy], references: [id])
+  items             BillItem[]
+  stockTransactions StockTransaction[]
+
+  @@index([createdBy])
+  @@map("bills")
+}
+
+model BillItem {
+  id          Int      @id @default(autoincrement())
+  billId      Int      @map("bill_id")
+  productId   Int      @map("product_id")
+  productCode String   @map("product_code")
+  productName String   @map("product_name")
+  unit        Unit
+  quantity    Decimal  @db.Decimal(12, 3)
+  rateType    RateType @map("rate_type")
+  rate        Decimal  @db.Decimal(12, 2)
+  amount      Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  bill        Bill     @relation(fields: [billId], references: [id], onDelete: Restrict)
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@index([billId])
+  @@index([productId])
+  @@map("bill_items")
+}
+
+model BillSequence {
+  id         Int      @id @default(autoincrement())
+  prefix     String   @unique
+  lastNumber Int      @default(0) @map("last_number")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("bill_sequences")
 }

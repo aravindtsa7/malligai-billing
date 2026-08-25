@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "db:test": "tsx src/test-db.ts",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "tsx --test --test-concurrency=1 tests/**/*.test.ts"
   },
   "keywords": [],
   "author": "",
