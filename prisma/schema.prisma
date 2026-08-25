@@ -62,12 +62,29 @@ model User {
   @@map("users")
 }
 
+model Category {
+  id           Int      @id @default(autoincrement())
+  categoryName String   @unique @map("category_name")
+  tamilName    String?  @map("tamil_name")
+  displayOrder Int      @default(0) @map("display_order")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@index([active, displayOrder])
+  @@map("categories")
+}
+
 model Product {
   id                Int                @id @default(autoincrement())
   productCode       String             @unique @map("product_code")
   barcode           String?            @unique
   productName       String             @map("product_name")
   tamilName         String?            @map("tamil_name")
+  categoryId        Int                @map("category_id")
+  category          Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   unit              Unit
   originalRate      Decimal            @default(0.00) @map("original_rate") @db.Decimal(12, 2)
   normalRate        Decimal            @default(0.00) @map("normal_rate") @db.Decimal(12, 2)
@@ -80,6 +97,7 @@ model Product {
   stockTransactions StockTransaction[]
   billItems         BillItem[]
 
+  @@index([categoryId])
   @@map("products")
 }
 
@@ -106,18 +124,18 @@ model StockTransaction {
 }
 
 model Bill {
-  id                Int                @id @default(autoincrement())
-  billNumber        String             @unique @map("bill_number")
-  rateType          RateType           @map("rate_type")
-  paymentType       PaymentType        @map("payment_type")
-  subtotal          Decimal            @db.Decimal(12, 2)
-  totalAmount       Decimal            @map("total_amount") @db.Decimal(12, 2)
-  status            BillStatus         @default(COMPLETED)
-  createdBy         Int                @map("created_by")
-  cancelledAt       DateTime?          @map("cancelled_at")
-  cancelledBy       Int?               @map("cancelled_by")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  id          Int         @id @default(autoincrement())
+  billNumber  String      @unique @map("bill_number")
+  rateType    RateType    @map("rate_type")
+  paymentType PaymentType @map("payment_type")
+  subtotal    Decimal     @db.Decimal(12, 2)
+  totalAmount Decimal     @map("total_amount") @db.Decimal(12, 2)
+  status      BillStatus  @default(COMPLETED)
+  createdBy   Int         @map("created_by")
+  cancelledAt DateTime?   @map("cancelled_at")
+  cancelledBy Int?        @map("cancelled_by")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
 
   creator           User               @relation("BillCreator", fields: [createdBy], references: [id])
   canceller         User?              @relation("BillCanceller", fields: [cancelledBy], references: [id])
@@ -142,8 +160,8 @@ model BillItem {
   amount      Decimal  @db.Decimal(12, 2)
   createdAt   DateTime @default(now()) @map("created_at")
 
-  bill        Bill     @relation(fields: [billId], references: [id], onDelete: Restrict)
-  product     Product  @relation(fields: [productId], references: [id])
+  bill    Bill    @relation(fields: [billId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id])
 
   @@index([billId])
   @@index([productId])

@@ -42,6 +42,10 @@ export const createProductSchema = z.object({
     .trim()
     .nullish()
     .transform((val) => (val === '' ? null : (val ?? null))),
+  categoryId: z
+    .number({ message: 'Category ID is required' })
+    .int('Category ID must be an integer')
+    .positive('Category ID must be a positive integer'),
   unit: z.nativeEnum(Unit, {
     message: `Unit must be one of: ${Object.values(Unit).join(', ')}`,
   }),
@@ -59,13 +63,24 @@ export const updateProductSchema = z
       .string()
       .trim()
       .nullish()
-      .transform((val) => (val === '' ? null : (val ?? null))),
+      .transform((val) => {
+        if (val === undefined) return undefined;
+        return val === '' || val === null ? null : val;
+      }),
     productName: z.string().trim().min(1, 'Product name cannot be empty').optional(),
     tamilName: z
       .string()
       .trim()
       .nullish()
-      .transform((val) => (val === '' ? null : (val ?? null))),
+      .transform((val) => {
+        if (val === undefined) return undefined;
+        return val === '' || val === null ? null : val;
+      }),
+    categoryId: z
+      .number()
+      .int('Category ID must be an integer')
+      .positive('Category ID must be a positive integer')
+      .optional(),
     unit: z.nativeEnum(Unit).optional(),
     originalRate: nonNegativeDecimal.optional(),
     normalRate: nonNegativeDecimal.optional(),
@@ -103,7 +118,18 @@ export const idParamSchema = z.object({
   id: z.coerce.number().int().positive('ID must be a positive integer'),
 });
 
+export const listProductsQuerySchema = z.object({
+  categoryId: z.coerce.number().int().positive('Category ID must be a positive integer').optional(),
+});
+
+export const searchProductsQuerySchema = z.object({
+  q: z.string().optional().default(''),
+  categoryId: z.coerce.number().int().positive('Category ID must be a positive integer').optional(),
+});
+
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type StockInInput = z.infer<typeof stockInSchema>;
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
+export type ListProductsQueryInput = z.infer<typeof listProductsQuerySchema>;
+export type SearchProductsQueryInput = z.infer<typeof searchProductsQuerySchema>;

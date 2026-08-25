@@ -710,6 +710,17 @@ describe('User Management Integration Tests (Phase 5)', () => {
       const loginData = await loginRes.json();
       const histSalesmanToken = loginData.data.token;
 
+      const genCat = await prisma.category.upsert({
+        where: { categoryName: 'General' },
+        update: {},
+        create: {
+          categoryName: 'General',
+          tamilName: 'பொதுவானவை',
+          displayOrder: 0,
+          active: true,
+        },
+      });
+
       // 3. Admin creates a product for billing
       const prodRes = await fetch(`${baseUrl}/api/products`, {
         method: 'POST',
@@ -720,6 +731,7 @@ describe('User Management Integration Tests (Phase 5)', () => {
         body: JSON.stringify({
           productCode: 'P5_HIST_PROD_1',
           productName: 'History Test Item',
+          categoryId: genCat.id,
           unit: Unit.PIECE,
           normalRate: 50,
           openingStock: 100,

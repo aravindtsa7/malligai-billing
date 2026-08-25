@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import authRoutes from './modules/auth/auth.routes.js';
+import categoryRoutes from './modules/categories/category.routes.js';
 import productRoutes from './modules/products/product.routes.js';
 import billingRoutes from './modules/billing/billing.routes.js';
 import userRoutes from './modules/users/user.routes.js';
@@ -24,6 +25,9 @@ app.get('/api/health', (_req, res) => {
 
 // Authentication routes
 app.use('/api/auth', authRoutes);
+
+// Category routes
+app.use('/api/categories', categoryRoutes);
 
 // Product & Stock routes
 app.use('/api/products', productRoutes);

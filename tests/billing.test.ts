@@ -25,6 +25,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
   let baseUrl: string;
   let adminToken: string;
   let salesmanToken: string;
+  let defaultCategoryId: number;
 
   const adminUser = {
     username: 'bill_test_admin',
@@ -70,6 +71,19 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
         username: { in: [adminUser.username, salesmanUser.username] },
       },
     });
+
+    // Ensure default General category exists
+    const cat = await prisma.category.upsert({
+      where: { categoryName: 'General' },
+      update: {},
+      create: {
+        categoryName: 'General',
+        tamilName: 'பொதுவானவை',
+        displayOrder: 0,
+        active: true,
+      },
+    });
+    defaultCategoryId = cat.id;
 
     // Create test admin
     const adminHash = await bcrypt.hash(adminUser.password, 10);
@@ -147,6 +161,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'BILL-RICE-01',
         productName: 'Sona Masoori Rice',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '45.00',
         normalRate: '60.00',
@@ -162,6 +177,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'BILL-DAL-01',
         productName: 'Toor Dal',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '120.00',
         normalRate: '150.00',
@@ -177,6 +193,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'BILL-OIL-01',
         productName: 'Gingelly Oil',
+        categoryId: defaultCategoryId,
         unit: Unit.LITRE,
         originalRate: '200.00',
         normalRate: '240.00',
@@ -192,6 +209,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'BILL-INACTIVE-01',
         productName: 'Discontinued Item',
+        categoryId: defaultCategoryId,
         unit: Unit.PACKET,
         originalRate: '10.00',
         normalRate: '15.00',
@@ -778,6 +796,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'BILL-CONC-STOCK-TEST',
         productName: 'Limited Edition Saffron',
+        categoryId: defaultCategoryId,
         unit: Unit.GRAM,
         originalRate: '300.00',
         normalRate: '400.00',
@@ -844,6 +863,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'BILL-CONC-NUM-TEST',
         productName: 'Abundant Salt',
+        categoryId: defaultCategoryId,
         unit: Unit.PACKET,
         originalRate: '10.00',
         normalRate: '20.00',
@@ -1063,6 +1083,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-PROD-01',
         productName: 'Turmeric Powder',
+        categoryId: defaultCategoryId,
         unit: Unit.PACKET,
         originalRate: '20.00',
         normalRate: '35.00',
@@ -1174,6 +1195,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-FRAC-PROD-01',
         productName: 'Premium Cardamom',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '1500.00',
         normalRate: '2000.00',
@@ -1311,6 +1333,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-SEQ-DOUBLE-01',
         productName: 'Cumin Seeds',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '200.00',
         normalRate: '260.00',
@@ -1372,6 +1395,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-CONC-DOUBLE-01',
         productName: 'Fenugreek Seeds',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '80.00',
         normalRate: '110.00',
@@ -1433,6 +1457,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-MULTI-01',
         productName: 'Multi Item 1',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         normalRate: '50.00',
         currentStock: '10.000',
@@ -1443,6 +1468,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-MULTI-02',
         productName: 'Multi Item 2',
+        categoryId: defaultCategoryId,
         unit: Unit.LITRE,
         normalRate: '120.00',
         currentStock: '15.000',
@@ -1453,6 +1479,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-MULTI-03',
         productName: 'Multi Item 3',
+        categoryId: defaultCategoryId,
         unit: Unit.PIECE,
         normalRate: '25.00',
         currentStock: '30.000',
@@ -1510,6 +1537,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-ROLLBACK-VALID',
         productName: 'Rollback Valid Product',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         normalRate: '50.00',
         currentStock: '8.000',
@@ -1572,6 +1600,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-INACTIVE-RESTORE',
         productName: 'Seasonal Mango Pickle',
+        categoryId: defaultCategoryId,
         unit: Unit.PACKET,
         originalRate: '40.00',
         normalRate: '60.00',
@@ -1623,6 +1652,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-POST-SALE-STOCK',
         productName: 'Asafoetida Compounded',
+        categoryId: defaultCategoryId,
         unit: Unit.BOX,
         originalRate: '50.00',
         normalRate: '75.00',
@@ -1694,6 +1724,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
       data: {
         productCode: 'CAN-CONC-SALE-CANCEL',
         productName: 'Mustard Seeds',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '70.00',
         normalRate: '90.00',

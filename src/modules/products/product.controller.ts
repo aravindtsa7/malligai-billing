@@ -1,7 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
 import { productService } from './product.service.js';
 import { stockService } from './stock.service.js';
-import { idParamSchema } from './product.schema.js';
+import {
+  idParamSchema,
+  listProductsQuerySchema,
+  searchProductsQuerySchema,
+} from './product.schema.js';
 import { UnauthorizedError } from '../../core/errors/app-error.js';
 
 export class ProductController {
@@ -25,9 +29,10 @@ export class ProductController {
     }
   }
 
-  async listProducts(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async listProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const products = await productService.listProducts();
+      const { categoryId } = listProductsQuerySchema.parse(req.query);
+      const products = await productService.listProducts(categoryId);
 
       res.status(200).json({
         success: true,
@@ -75,8 +80,8 @@ export class ProductController {
 
   async searchProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const query = typeof req.query.q === 'string' ? req.query.q : '';
-      const products = await productService.searchProducts(query);
+      const { q, categoryId } = searchProductsQuerySchema.parse(req.query);
+      const products = await productService.searchProducts(q, categoryId);
 
       res.status(200).json({
         success: true,

@@ -16,6 +16,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
   let baseUrl: string;
   let adminToken: string;
   let salesmanToken: string;
+  let defaultCategoryId: number;
 
   const adminUser = {
     username: 'prod_test_admin',
@@ -57,6 +58,19 @@ describe('Product and Stock Foundation Integration Tests', () => {
         username: { in: [adminUser.username, salesmanUser.username] },
       },
     });
+
+    // Ensure default General category exists
+    const cat = await prisma.category.upsert({
+      where: { categoryName: 'General' },
+      update: {},
+      create: {
+        categoryName: 'General',
+        tamilName: 'பொதுவானவை',
+        displayOrder: 0,
+        active: true,
+      },
+    });
+    defaultCategoryId = cat.id;
 
     // Create test admin
     const adminHash = await bcrypt.hash(adminUser.password, 10);
@@ -135,6 +149,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         barcode: '8901234567890',
         productName: 'Ponni Rice',
         tamilName: 'பொன்னி அரிசி',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '52.50',
         normalRate: '60.00',
@@ -166,6 +181,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
       body: JSON.stringify({
         productCode: 'PROD-002',
         productName: 'Sugar',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '40.00',
         normalRate: '45.00',
@@ -190,6 +206,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
       body: JSON.stringify({
         productCode: 'PROD-RATES',
         productName: 'Special Ghee',
+        categoryId: defaultCategoryId,
         unit: Unit.LITRE,
         originalRate: '600.00',
         normalRate: '650.50',
@@ -216,6 +233,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
       body: JSON.stringify({
         productCode: 'PROD-FRAC',
         productName: 'Cardamom',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '2000.00',
         normalRate: '2500.00',
@@ -255,6 +273,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
       body: JSON.stringify({
         productCode: 'PROD-001',
         productName: 'Duplicate Rice',
+        categoryId: defaultCategoryId,
         unit: Unit.KG,
         originalRate: '50.00',
         normalRate: '60.00',
@@ -279,6 +298,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productCode: 'PROD-NEW-UNIQUE',
         barcode: '8901234567890', // same as PROD-001
         productName: 'Another Item',
+        categoryId: defaultCategoryId,
         unit: Unit.PACKET,
         originalRate: '10.00',
         normalRate: '15.00',
@@ -544,6 +564,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
       data: {
         productCode: 'PROD-INACTIVE',
         productName: 'Discontinued Brand',
+        categoryId: defaultCategoryId,
         unit: Unit.PIECE,
         originalRate: '10.00',
         normalRate: '15.00',
@@ -576,6 +597,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
       data: {
         productCode: 'PROD-PRECISE',
         productName: 'Gold Dust Spice',
+        categoryId: defaultCategoryId,
         unit: Unit.GRAM,
         originalRate: '100.00',
         normalRate: '150.00',
@@ -608,6 +630,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
       data: {
         productCode: 'PROD-CONCURRENT',
         productName: 'High Concurrency Oil',
+        categoryId: defaultCategoryId,
         unit: Unit.LITRE,
         originalRate: '120.00',
         normalRate: '140.00',
@@ -651,6 +674,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
     const productPayload = {
       productCode: 'PROD-CONCURRENT-DUP-CODE',
       productName: 'Concurrent Code Item',
+      categoryId: defaultCategoryId,
       unit: Unit.PACKET,
       originalRate: '10.00',
       normalRate: '15.00',
@@ -699,6 +723,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productCode: 'PROD-RACE-BARCODE-1',
         barcode: '8909999888877',
         productName: 'Barcode Item 1',
+        categoryId: defaultCategoryId,
         unit: Unit.PACKET,
         originalRate: '20.00',
         normalRate: '25.00',
@@ -717,6 +742,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productCode: 'PROD-RACE-BARCODE-2',
         barcode: '8909999888877',
         productName: 'Barcode Item 2',
+        categoryId: defaultCategoryId,
         unit: Unit.PACKET,
         originalRate: '20.00',
         normalRate: '25.00',

@@ -1,12 +1,22 @@
 import { Prisma } from '../../generated/prisma/client.js';
 import type { Unit, StockTransactionType } from '../../generated/prisma/enums.js';
 
+export interface SerializedCategoryRef {
+  id: number;
+  categoryName: string;
+  tamilName: string | null;
+  displayOrder: number;
+  active: boolean;
+}
+
 export interface SerializedProduct {
   id: number;
   productCode: string;
   barcode: string | null;
   productName: string;
   tamilName: string | null;
+  categoryId: number;
+  category?: SerializedCategoryRef;
   unit: Unit;
   originalRate: string;
   normalRate: string;
@@ -46,6 +56,14 @@ export function serializeProduct(product: {
   barcode: string | null;
   productName: string;
   tamilName: string | null;
+  categoryId: number;
+  category?: {
+    id: number;
+    categoryName: string;
+    tamilName: string | null;
+    displayOrder: number;
+    active: boolean;
+  } | null;
   unit: Unit;
   originalRate: unknown;
   normalRate: unknown;
@@ -62,6 +80,18 @@ export function serializeProduct(product: {
     barcode: product.barcode ?? null,
     productName: product.productName,
     tamilName: product.tamilName ?? null,
+    categoryId: product.categoryId,
+    ...(product.category
+      ? {
+          category: {
+            id: product.category.id,
+            categoryName: product.category.categoryName,
+            tamilName: product.category.tamilName ?? null,
+            displayOrder: product.category.displayOrder,
+            active: product.category.active,
+          },
+        }
+      : {}),
     unit: product.unit,
     originalRate: formatRate(product.originalRate),
     normalRate: formatRate(product.normalRate),
