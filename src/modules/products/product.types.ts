@@ -18,6 +18,7 @@ export interface SerializedProduct {
   categoryId: number;
   category?: SerializedCategoryRef;
   unit: Unit;
+  mrpRate: string;
   originalRate: string;
   normalRate: string;
   retailRate: string;
@@ -65,6 +66,7 @@ export function serializeProduct(product: {
     active: boolean;
   } | null;
   unit: Unit;
+  mrpRate?: unknown;
   originalRate: unknown;
   normalRate: unknown;
   retailRate: unknown;
@@ -93,6 +95,7 @@ export function serializeProduct(product: {
         }
       : {}),
     unit: product.unit,
+    mrpRate: formatRate(product.mrpRate),
     originalRate: formatRate(product.originalRate),
     normalRate: formatRate(product.normalRate),
     retailRate: formatRate(product.retailRate),

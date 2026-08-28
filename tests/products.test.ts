@@ -151,6 +151,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         tamilName: 'பொன்னி அரிசி',
         categoryId: defaultCategoryId,
         unit: Unit.KG,
+        mrpRate: '70.00',
         originalRate: '52.50',
         normalRate: '60.00',
         retailRate: '58.00',
@@ -167,6 +168,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
     assert.strictEqual(body.data.product.productName, 'Ponni Rice');
     assert.strictEqual(body.data.product.tamilName, 'பொன்னி அரிசி');
     assert.strictEqual(body.data.product.unit, Unit.KG);
+    assert.strictEqual(body.data.product.mrpRate, '70.00');
     assert.strictEqual(body.data.product.active, true);
     createdProductId = body.data.product.id;
   });
@@ -183,6 +185,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productName: 'Sugar',
         categoryId: defaultCategoryId,
         unit: Unit.KG,
+        mrpRate: '50.00',
         originalRate: '40.00',
         normalRate: '45.00',
         retailRate: '44.00',
@@ -208,6 +211,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productName: 'Special Ghee',
         categoryId: defaultCategoryId,
         unit: Unit.LITRE,
+        mrpRate: '800.00',
         originalRate: '600.00',
         normalRate: '650.50',
         retailRate: '620.25',
@@ -217,6 +221,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
 
     const body = await res.json();
     assert.strictEqual(res.status, 201);
+    assert.strictEqual(body.data.product.mrpRate, '800.00');
     assert.strictEqual(body.data.product.originalRate, '600.00');
     assert.strictEqual(body.data.product.normalRate, '650.50');
     assert.strictEqual(body.data.product.retailRate, '620.25');
@@ -235,6 +240,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productName: 'Cardamom',
         categoryId: defaultCategoryId,
         unit: Unit.KG,
+        mrpRate: '3000.00',
         originalRate: '2000.00',
         normalRate: '2500.00',
         retailRate: '2400.00',
@@ -275,6 +281,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productName: 'Duplicate Rice',
         categoryId: defaultCategoryId,
         unit: Unit.KG,
+        mrpRate: '70.00',
         originalRate: '50.00',
         normalRate: '60.00',
         retailRate: '58.00',
@@ -300,6 +307,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productName: 'Another Item',
         categoryId: defaultCategoryId,
         unit: Unit.PACKET,
+        mrpRate: '20.00',
         originalRate: '10.00',
         normalRate: '15.00',
         retailRate: '14.00',
@@ -676,6 +684,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
       productName: 'Concurrent Code Item',
       categoryId: defaultCategoryId,
       unit: Unit.PACKET,
+      mrpRate: '20.00',
       originalRate: '10.00',
       normalRate: '15.00',
       retailRate: '14.00',
@@ -725,6 +734,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productName: 'Barcode Item 1',
         categoryId: defaultCategoryId,
         unit: Unit.PACKET,
+        mrpRate: '30.00',
         originalRate: '20.00',
         normalRate: '25.00',
         retailRate: '24.00',
@@ -744,6 +754,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
         productName: 'Barcode Item 2',
         categoryId: defaultCategoryId,
         unit: Unit.PACKET,
+        mrpRate: '30.00',
         originalRate: '20.00',
         normalRate: '25.00',
         retailRate: '24.00',

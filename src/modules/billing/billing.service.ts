@@ -19,6 +19,7 @@ interface PreparedBillItem {
   productId: number;
   productCode: string;
   productName: string;
+  tamilName: string | null;
   unit: Unit;
   quantity: Prisma.Decimal;
   rate: Prisma.Decimal;
@@ -38,6 +39,7 @@ export class BillingService {
           id: number;
           product_code: string;
           product_name: string;
+          tamil_name: string | null;
           unit: Unit;
           original_rate: unknown;
           normal_rate: unknown;
@@ -47,7 +49,7 @@ export class BillingService {
           active: number | boolean;
         }>
       >`
-        SELECT id, product_code, product_name, unit, original_rate, normal_rate, retail_rate, function_rate, current_stock, active
+        SELECT id, product_code, product_name, tamil_name, unit, original_rate, normal_rate, retail_rate, function_rate, current_stock, active
         FROM products
         WHERE id IN (${Prisma.join(sortedProductIds)})
         ORDER BY id ASC
@@ -66,6 +68,18 @@ export class BillingService {
           throw new BadRequestError(`Product "${prod.product_name}" is inactive and cannot be billed`);
         }
       }
+
+      // Read current Receipt Settings inside the transaction
+      const receiptSettings = await tx.receiptSettings.findFirst({
+        orderBy: { id: 'asc' },
+      });
+      const receiptStoreName = receiptSettings?.storeName ?? 'Malligai Billing';
+      const receiptUpiId = receiptSettings?.upiId ?? null;
+      const receiptGstin = receiptSettings?.gstin ?? null;
+      const receiptShowCashier = receiptSettings?.showCashier ?? true;
+      const receiptShowRateTier = receiptSettings?.showRateTier ?? true;
+      const receiptShowPayment = receiptSettings?.showPayment ?? true;
+      const receiptShowStatus = receiptSettings?.showStatus ?? true;
 
       // 3. Calculate rates, amounts, and validate stock for each item
       let subtotalDec = new Prisma.Decimal('0.00');
@@ -102,6 +116,7 @@ export class BillingService {
           productId: prod.id,
           productCode: prod.product_code,
           productName: prod.product_name,
+          tamilName: prod.tamil_name ?? null,
           unit: prod.unit,
           quantity: qtyDec,
           rate: rateDec,
@@ -134,7 +149,7 @@ export class BillingService {
 
       const billNumber = `${datePrefix}-${String(nextSeq).padStart(4, '0')}`;
 
-      // 5. Create Bill record
+      // 5. Create Bill record with receipt snapshot
       const bill = await tx.bill.create({
         data: {
           billNumber,
@@ -144,6 +159,13 @@ export class BillingService {
           totalAmount: totalAmountDec.toFixed(2),
           status: BillStatus.COMPLETED,
           createdBy: userId,
+          receiptStoreName,
+          receiptUpiId,
+          receiptGstin,
+          receiptShowCashier,
+          receiptShowRateTier,
+          receiptShowPayment,
+          receiptShowStatus,
         },
       });
 
@@ -154,6 +176,7 @@ export class BillingService {
           productId: pi.productId,
           productCode: pi.productCode,
           productName: pi.productName,
+          tamilName: pi.tamilName,
           unit: pi.unit,
           quantity: pi.quantity.toFixed(3),
           rateType: input.rateType,

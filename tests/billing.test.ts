@@ -1549,8 +1549,8 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
     // We insert via raw SQL bypassing foreign key checks in a transaction to simulate mid-transaction failure
     const billNumber = 'BILL-ROLLBACK-TEST-0001';
     await prisma.$executeRaw`
-      INSERT INTO bills (bill_number, rate_type, payment_type, subtotal, total_amount, status, created_by, created_at, updated_at)
-      VALUES (${billNumber}, 'NORMAL', 'CASH', 100.00, 100.00, 'COMPLETED', ${adminUserId}, NOW(3), NOW(3))
+      INSERT INTO bills (bill_number, rate_type, payment_type, subtotal, total_amount, status, created_by, receipt_store_name, created_at, updated_at)
+      VALUES (${billNumber}, 'NORMAL', 'CASH', 100.00, 100.00, 'COMPLETED', ${adminUserId}, 'Malligai Billing', NOW(3), NOW(3))
     `;
     const [billRow] = await prisma.$queryRaw<Array<{ id: number }>>`
       SELECT id FROM bills WHERE bill_number = ${billNumber}

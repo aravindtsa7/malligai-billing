@@ -5,6 +5,7 @@ const nonNegativeDecimal = z
   .union([z.number(), z.string()])
   .refine(
     (val) => {
+      if (typeof val === 'string' && val.trim() === '') return false;
       const num = Number(val);
       return !isNaN(num) && num >= 0;
     },
@@ -16,12 +17,60 @@ const positiveDecimal = z
   .union([z.number(), z.string()])
   .refine(
     (val) => {
+      if (typeof val === 'string' && val.trim() === '') return false;
       const num = Number(val);
       return !isNaN(num) && num > 0;
     },
     { message: 'Quantity must be greater than 0' }
   )
   .transform((val) => String(val));
+
+const requiredNonNegativeDecimal = z
+  .union([z.number(), z.string({ message: 'Must be a non-negative number' })], {
+    message: 'Rate is required and must be a non-negative number',
+  })
+  .refine(
+    (val) => {
+      if (typeof val === 'string' && val.trim() === '') return false;
+      const num = Number(val);
+      return !isNaN(num) && num >= 0;
+    },
+    { message: 'Must be a valid non-negative number' }
+  )
+  .transform((val) => String(val));
+
+const optionalRateDecimal = z
+  .union([z.number(), z.string()])
+  .nullish()
+  .refine(
+    (val) => {
+      if (val === undefined || val === null || val === '') return true;
+      const num = Number(val);
+      return !isNaN(num) && num >= 0;
+    },
+    { message: 'Must be a valid non-negative number' }
+  )
+  .transform((val) => {
+    if (val === undefined || val === null || val === '') return undefined;
+    return String(val);
+  });
+
+const clearableRateDecimal = z
+  .union([z.number(), z.string()])
+  .nullish()
+  .refine(
+    (val) => {
+      if (val === undefined || val === null || val === '') return true;
+      const num = Number(val);
+      return !isNaN(num) && num >= 0;
+    },
+    { message: 'Must be a valid non-negative number' }
+  )
+  .transform((val) => {
+    if (val === undefined) return undefined;
+    if (val === null || val === '') return null;
+    return String(val);
+  });
 
 export const createProductSchema = z.object({
   productCode: z
@@ -49,10 +98,11 @@ export const createProductSchema = z.object({
   unit: z.nativeEnum(Unit, {
     message: `Unit must be one of: ${Object.values(Unit).join(', ')}`,
   }),
-  originalRate: nonNegativeDecimal.default('0'),
-  normalRate: nonNegativeDecimal.default('0'),
-  retailRate: nonNegativeDecimal.default('0'),
-  functionRate: nonNegativeDecimal.default('0'),
+  mrpRate: requiredNonNegativeDecimal,
+  normalRate: requiredNonNegativeDecimal,
+  originalRate: optionalRateDecimal.optional(),
+  retailRate: optionalRateDecimal.optional(),
+  functionRate: optionalRateDecimal.optional(),
   openingStock: nonNegativeDecimal.optional(),
 });
 
@@ -82,10 +132,11 @@ export const updateProductSchema = z
       .positive('Category ID must be a positive integer')
       .optional(),
     unit: z.nativeEnum(Unit).optional(),
-    originalRate: nonNegativeDecimal.optional(),
-    normalRate: nonNegativeDecimal.optional(),
-    retailRate: nonNegativeDecimal.optional(),
-    functionRate: nonNegativeDecimal.optional(),
+    mrpRate: requiredNonNegativeDecimal.optional(),
+    normalRate: requiredNonNegativeDecimal.optional(),
+    originalRate: clearableRateDecimal.optional(),
+    retailRate: clearableRateDecimal.optional(),
+    functionRate: clearableRateDecimal.optional(),
     active: z.boolean().optional(),
     currentStock: z.any().optional(),
   })

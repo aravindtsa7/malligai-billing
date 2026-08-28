@@ -6,6 +6,7 @@ import categoryRoutes from './modules/categories/category.routes.js';
 import productRoutes from './modules/products/product.routes.js';
 import billingRoutes from './modules/billing/billing.routes.js';
 import userRoutes from './modules/users/user.routes.js';
+import receiptSettingsRoutes from './modules/receipt-settings/receipt-settings.routes.js';
 import { notFoundHandler } from './core/middlewares/not-found.middleware.js';
 import { errorHandler } from './core/middlewares/error.middleware.js';
 
@@ -34,6 +35,9 @@ app.use('/api/products', productRoutes);
 
 // Billing routes
 app.use('/api/bills', billingRoutes);
+
+// Receipt settings routes (ADMIN only)
+app.use('/api/receipt-settings', receiptSettingsRoutes);
 
 // User management routes (ADMIN only)
 app.use('/api/users', userRoutes);

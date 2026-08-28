@@ -28,6 +28,12 @@ export class ProductService {
     const openingStockVal = input.openingStock ? input.openingStock : '0';
     const hasOpeningStock = Number(openingStockVal) > 0;
 
+    const mrpRate = new Prisma.Decimal(input.mrpRate).toFixed(2);
+    const normalRate = new Prisma.Decimal(input.normalRate).toFixed(2);
+    const originalRate = input.originalRate ? new Prisma.Decimal(input.originalRate).toFixed(2) : '0.00';
+    const retailRate = input.retailRate ? new Prisma.Decimal(input.retailRate).toFixed(2) : normalRate;
+    const functionRate = input.functionRate ? new Prisma.Decimal(input.functionRate).toFixed(2) : normalRate;
+
     return await prisma.$transaction(async (tx) => {
       const categoryRows = await tx.$queryRaw<
         Array<{ id: number; category_name: string; active: number | boolean }>
@@ -57,10 +63,11 @@ export class ProductService {
           tamilName: input.tamilName,
           categoryId: input.categoryId,
           unit: input.unit,
-          originalRate: input.originalRate,
-          normalRate: input.normalRate,
-          retailRate: input.retailRate,
-          functionRate: input.functionRate,
+          mrpRate,
+          originalRate,
+          normalRate,
+          retailRate,
+          functionRate,
           currentStock: openingStockVal,
           active: true,
         },
@@ -85,6 +92,50 @@ export class ProductService {
 
       return serializeProduct(product);
     });
+  }
+
+  private buildProductUpdateData(product: { normalRate: unknown }, input: UpdateProductInput): Prisma.ProductUncheckedUpdateInput {
+    const data: Prisma.ProductUncheckedUpdateInput = {};
+
+    if (input.productCode !== undefined) data.productCode = input.productCode;
+    if (input.barcode !== undefined) data.barcode = input.barcode;
+    if (input.productName !== undefined) data.productName = input.productName;
+    if (input.tamilName !== undefined) data.tamilName = input.tamilName;
+    if (input.unit !== undefined) data.unit = input.unit;
+    if (input.active !== undefined) data.active = input.active;
+
+    if (input.mrpRate !== undefined) {
+      data.mrpRate = new Prisma.Decimal(input.mrpRate).toFixed(2);
+    }
+
+    if (input.normalRate !== undefined) {
+      data.normalRate = new Prisma.Decimal(input.normalRate).toFixed(2);
+    }
+
+    const effectiveNormalRate =
+      input.normalRate !== undefined
+        ? new Prisma.Decimal(input.normalRate).toFixed(2)
+        : new Prisma.Decimal(String(product.normalRate)).toFixed(2);
+
+    if (input.originalRate === null) {
+      data.originalRate = '0.00';
+    } else if (input.originalRate !== undefined) {
+      data.originalRate = new Prisma.Decimal(input.originalRate).toFixed(2);
+    }
+
+    if (input.retailRate === null) {
+      data.retailRate = effectiveNormalRate;
+    } else if (input.retailRate !== undefined) {
+      data.retailRate = new Prisma.Decimal(input.retailRate).toFixed(2);
+    }
+
+    if (input.functionRate === null) {
+      data.functionRate = effectiveNormalRate;
+    } else if (input.functionRate !== undefined) {
+      data.functionRate = new Prisma.Decimal(input.functionRate).toFixed(2);
+    }
+
+    return data;
   }
 
   async updateProduct(id: number, input: UpdateProductInput): Promise<SerializedProduct> {
@@ -138,21 +189,12 @@ export class ProductService {
           );
         }
 
+        const updateData = this.buildProductUpdateData(product, input);
+        updateData.categoryId = input.categoryId;
+
         const updated = await tx.product.update({
           where: { id },
-          data: {
-            ...(input.productCode !== undefined ? { productCode: input.productCode } : {}),
-            ...(input.barcode !== undefined ? { barcode: input.barcode } : {}),
-            ...(input.productName !== undefined ? { productName: input.productName } : {}),
-            ...(input.tamilName !== undefined ? { tamilName: input.tamilName } : {}),
-            ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
-            ...(input.unit !== undefined ? { unit: input.unit } : {}),
-            ...(input.originalRate !== undefined ? { originalRate: input.originalRate } : {}),
-            ...(input.normalRate !== undefined ? { normalRate: input.normalRate } : {}),
-            ...(input.retailRate !== undefined ? { retailRate: input.retailRate } : {}),
-            ...(input.functionRate !== undefined ? { functionRate: input.functionRate } : {}),
-            ...(input.active !== undefined ? { active: input.active } : {}),
-          },
+          data: updateData,
           include: {
             category: true,
           },
@@ -190,20 +232,11 @@ export class ProductService {
       }
     }
 
+    const updateData = this.buildProductUpdateData(product, input);
+
     const updated = await prisma.product.update({
       where: { id },
-      data: {
-        ...(input.productCode !== undefined ? { productCode: input.productCode } : {}),
-        ...(input.barcode !== undefined ? { barcode: input.barcode } : {}),
-        ...(input.productName !== undefined ? { productName: input.productName } : {}),
-        ...(input.tamilName !== undefined ? { tamilName: input.tamilName } : {}),
-        ...(input.unit !== undefined ? { unit: input.unit } : {}),
-        ...(input.originalRate !== undefined ? { originalRate: input.originalRate } : {}),
-        ...(input.normalRate !== undefined ? { normalRate: input.normalRate } : {}),
-        ...(input.retailRate !== undefined ? { retailRate: input.retailRate } : {}),
-        ...(input.functionRate !== undefined ? { functionRate: input.functionRate } : {}),
-        ...(input.active !== undefined ? { active: input.active } : {}),
-      },
+      data: updateData,
       include: {
         category: true,
       },

@@ -1,12 +1,23 @@
 import { Prisma } from '../../generated/prisma/client.js';
 import type { Unit, RateType, PaymentType, BillStatus, Role } from '../../generated/prisma/enums.js';
 
+export interface SerializedReceiptSnapshot {
+  storeName: string;
+  upiId: string | null;
+  gstin: string | null;
+  showCashier: boolean;
+  showRateTier: boolean;
+  showPayment: boolean;
+  showStatus: boolean;
+}
+
 export interface SerializedBillItem {
   id: number;
   billId: number;
   productId: number;
   productCode: string;
   productName: string;
+  tamilName: string | null;
   unit: Unit;
   quantity: string;
   rateType: RateType;
@@ -32,6 +43,7 @@ export interface SerializedBill {
   createdBy: number;
   cancelledAt?: Date | null;
   cancelledBy?: number | null;
+  receiptSnapshot: SerializedReceiptSnapshot;
   createdAt: Date;
   updatedAt: Date;
   creator?: SerializedBillCreator;
@@ -83,6 +95,7 @@ export function serializeBillItem(item: {
   productId: number;
   productCode: string;
   productName: string;
+  tamilName?: string | null;
   unit: Unit;
   quantity: unknown;
   rateType: RateType;
@@ -96,6 +109,7 @@ export function serializeBillItem(item: {
     productId: item.productId,
     productCode: item.productCode,
     productName: item.productName,
+    tamilName: item.tamilName ?? null,
     unit: item.unit,
     quantity: formatQuantity(item.quantity),
     rateType: item.rateType,
@@ -116,6 +130,13 @@ export function serializeBill(bill: {
   createdBy: number;
   cancelledAt?: Date | null;
   cancelledBy?: number | null;
+  receiptStoreName?: string;
+  receiptUpiId?: string | null;
+  receiptGstin?: string | null;
+  receiptShowCashier?: boolean;
+  receiptShowRateTier?: boolean;
+  receiptShowPayment?: boolean;
+  receiptShowStatus?: boolean;
   createdAt: Date;
   updatedAt: Date;
   creator?: {
@@ -134,6 +155,7 @@ export function serializeBill(bill: {
     productId: number;
     productCode: string;
     productName: string;
+    tamilName?: string | null;
     unit: Unit;
     quantity: unknown;
     rateType: RateType;
@@ -153,6 +175,15 @@ export function serializeBill(bill: {
     createdBy: bill.createdBy,
     cancelledAt: bill.cancelledAt ?? null,
     cancelledBy: bill.cancelledBy ?? null,
+    receiptSnapshot: {
+      storeName: bill.receiptStoreName ?? 'Malligai Billing',
+      upiId: bill.receiptUpiId ?? null,
+      gstin: bill.receiptGstin ?? null,
+      showCashier: bill.receiptShowCashier ?? true,
+      showRateTier: bill.receiptShowRateTier ?? true,
+      showPayment: bill.receiptShowPayment ?? true,
+      showStatus: bill.receiptShowStatus ?? true,
+    },
     createdAt: bill.createdAt,
     updatedAt: bill.updatedAt,
   };

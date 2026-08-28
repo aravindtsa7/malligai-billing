@@ -733,6 +733,7 @@ describe('User Management Integration Tests (Phase 5)', () => {
           productName: 'History Test Item',
           categoryId: genCat.id,
           unit: Unit.PIECE,
+          mrpRate: 60,
           normalRate: 50,
           openingStock: 100,
         }),

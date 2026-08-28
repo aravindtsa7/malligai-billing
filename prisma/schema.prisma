@@ -86,6 +86,7 @@ model Product {
   categoryId        Int                @map("category_id")
   category          Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   unit              Unit
+  mrpRate           Decimal            @default(0.00) @map("mrp_rate") @db.Decimal(12, 2)
   originalRate      Decimal            @default(0.00) @map("original_rate") @db.Decimal(12, 2)
   normalRate        Decimal            @default(0.00) @map("normal_rate") @db.Decimal(12, 2)
   retailRate        Decimal            @default(0.00) @map("retail_rate") @db.Decimal(12, 2)
@@ -124,18 +125,25 @@ model StockTransaction {
 }
 
 model Bill {
-  id          Int         @id @default(autoincrement())
-  billNumber  String      @unique @map("bill_number")
-  rateType    RateType    @map("rate_type")
-  paymentType PaymentType @map("payment_type")
-  subtotal    Decimal     @db.Decimal(12, 2)
-  totalAmount Decimal     @map("total_amount") @db.Decimal(12, 2)
-  status      BillStatus  @default(COMPLETED)
-  createdBy   Int         @map("created_by")
-  cancelledAt DateTime?   @map("cancelled_at")
-  cancelledBy Int?        @map("cancelled_by")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  id                  Int         @id @default(autoincrement())
+  billNumber          String      @unique @map("bill_number")
+  rateType            RateType    @map("rate_type")
+  paymentType         PaymentType @map("payment_type")
+  subtotal            Decimal     @db.Decimal(12, 2)
+  totalAmount         Decimal     @map("total_amount") @db.Decimal(12, 2)
+  status              BillStatus  @default(COMPLETED)
+  createdBy           Int         @map("created_by")
+  cancelledAt         DateTime?   @map("cancelled_at")
+  cancelledBy         Int?        @map("cancelled_by")
+  receiptStoreName    String      @map("receipt_store_name")
+  receiptUpiId        String?     @map("receipt_upi_id")
+  receiptGstin        String?     @map("receipt_gstin")
+  receiptShowCashier  Boolean     @default(true) @map("receipt_show_cashier")
+  receiptShowRateTier Boolean     @default(true) @map("receipt_show_rate_tier")
+  receiptShowPayment  Boolean     @default(true) @map("receipt_show_payment")
+  receiptShowStatus   Boolean     @default(true) @map("receipt_show_status")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
 
   creator           User               @relation("BillCreator", fields: [createdBy], references: [id])
   canceller         User?              @relation("BillCanceller", fields: [cancelledBy], references: [id])
@@ -153,6 +161,7 @@ model BillItem {
   productId   Int      @map("product_id")
   productCode String   @map("product_code")
   productName String   @map("product_name")
+  tamilName   String?  @map("tamil_name")
   unit        Unit
   quantity    Decimal  @db.Decimal(12, 3)
   rateType    RateType @map("rate_type")
@@ -175,4 +184,19 @@ model BillSequence {
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@map("bill_sequences")
+}
+
+model ReceiptSettings {
+  id           Int      @id @default(autoincrement())
+  storeName    String   @map("store_name")
+  upiId        String?  @map("upi_id")
+  gstin        String?  @map("gstin")
+  showCashier  Boolean  @default(true) @map("show_cashier")
+  showRateTier Boolean  @default(true) @map("show_rate_tier")
+  showPayment  Boolean  @default(true) @map("show_payment")
+  showStatus   Boolean  @default(true) @map("show_status")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("receipt_settings")
 }
