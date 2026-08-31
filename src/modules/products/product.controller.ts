@@ -111,6 +111,24 @@ export class ProductController {
     }
   }
 
+  async scanProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const valueParam = req.params.value;
+      const value = Array.isArray(valueParam) ? valueParam[0] : String(valueParam);
+      const product = await productService.scanProduct(value);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          product,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+
   async stockIn(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {

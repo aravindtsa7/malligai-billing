@@ -7,7 +7,9 @@ import productRoutes from './modules/products/product.routes.js';
 import billingRoutes from './modules/billing/billing.routes.js';
 import userRoutes from './modules/users/user.routes.js';
 import receiptSettingsRoutes from './modules/receipt-settings/receipt-settings.routes.js';
+import labelSettingsRoutes from './modules/label-settings/label-settings.routes.js';
 import { notFoundHandler } from './core/middlewares/not-found.middleware.js';
+
 import { errorHandler } from './core/middlewares/error.middleware.js';
 
 const app = express();
@@ -39,7 +41,11 @@ app.use('/api/bills', billingRoutes);
 // Receipt settings routes (ADMIN only)
 app.use('/api/receipt-settings', receiptSettingsRoutes);
 
+// Label settings routes (ADMIN only)
+app.use('/api/label-settings', labelSettingsRoutes);
+
 // User management routes (ADMIN only)
+
 app.use('/api/users', userRoutes);
 
 // 404 handler for unmatched routes

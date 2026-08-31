@@ -48,7 +48,18 @@ router.get(
   }
 );
 
+// Lookup product by scan value (productCode or barcode) (ADMIN, SALESMAN)
+router.get(
+  '/scan/:value',
+  authenticate,
+  authorizeRoles(Role.ADMIN, Role.SALESMAN),
+  (req, res, next) => {
+    productController.scanProduct(req, res, next);
+  }
+);
+
 // Get single product by ID (ADMIN, SALESMAN)
+
 router.get(
   '/:id',
   authenticate,

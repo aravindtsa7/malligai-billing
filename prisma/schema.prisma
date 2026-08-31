@@ -47,6 +47,11 @@ enum BillStatus {
   CANCELLED
 }
 
+enum LabelSize {
+  LABEL_50X40
+  LABEL_50X50
+}
+
 model User {
   id                Int                @id @default(autoincrement())
   username          String             @unique
@@ -199,4 +204,14 @@ model ReceiptSettings {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("receipt_settings")
+}
+
+model LabelSettings {
+  id               Int       @id @default(autoincrement())
+  storeName        String    @map("store_name")
+  defaultLabelSize LabelSize @default(LABEL_50X40) @map("default_label_size")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("label_settings")
 }
