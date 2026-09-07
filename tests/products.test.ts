@@ -8,6 +8,7 @@ import productRoutes from '../src/modules/products/product.routes.js';
 import { notFoundHandler } from '../src/core/middlewares/not-found.middleware.js';
 import { errorHandler } from '../src/core/middlewares/error.middleware.js';
 import { prisma } from '../src/core/database/prisma.js';
+import { assertTestDatabase } from './test-helper.js';
 import { Role, Unit, StockTransactionType } from '../src/generated/prisma/enums.js';
 import { formatQuantity } from '../src/modules/products/product.types.js';
 
@@ -31,6 +32,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
   };
 
   before(async () => {
+    await assertTestDatabase();
     const testApp = express();
     testApp.use(express.json());
 

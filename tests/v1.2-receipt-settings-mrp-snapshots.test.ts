@@ -10,6 +10,7 @@ import receiptSettingsRoutes from '../src/modules/receipt-settings/receipt-setti
 import { notFoundHandler } from '../src/core/middlewares/not-found.middleware.js';
 import { errorHandler } from '../src/core/middlewares/error.middleware.js';
 import { prisma } from '../src/core/database/prisma.js';
+import { assertTestDatabase } from './test-helper.js';
 import { Prisma } from '../src/generated/prisma/client.js';
 import {
   Role,
@@ -39,6 +40,7 @@ describe('Malligai Billing Backend V1.2 Integration Tests (Receipt Settings, Sna
   };
 
   before(async () => {
+    await assertTestDatabase();
     const testApp = express();
     testApp.use(express.json());
 

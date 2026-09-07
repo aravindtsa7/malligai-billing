@@ -9,6 +9,7 @@ import billingRoutes from '../src/modules/billing/billing.routes.js';
 import { notFoundHandler } from '../src/core/middlewares/not-found.middleware.js';
 import { errorHandler } from '../src/core/middlewares/error.middleware.js';
 import { prisma } from '../src/core/database/prisma.js';
+import { assertTestDatabase } from './test-helper.js';
 import {
   Role,
   Unit,
@@ -40,6 +41,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
   };
 
   before(async () => {
+    await assertTestDatabase();
     const testApp = express();
     testApp.use(express.json());
 

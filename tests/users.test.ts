@@ -4,6 +4,7 @@ import type { Server } from 'node:http';
 import bcrypt from 'bcryptjs';
 import app from '../src/app.js';
 import { prisma } from '../src/core/database/prisma.js';
+import { assertTestDatabase } from './test-helper.js';
 import { Role, Unit, RateType, PaymentType } from '../src/generated/prisma/enums.js';
 
 describe('User Management Integration Tests (Phase 5)', () => {
@@ -27,6 +28,7 @@ describe('User Management Integration Tests (Phase 5)', () => {
   };
 
   before(async () => {
+    await assertTestDatabase();
     // Start test server using the main Express app
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {

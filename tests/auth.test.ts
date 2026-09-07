@@ -7,6 +7,7 @@ import authRoutes from '../src/modules/auth/auth.routes.js';
 import { notFoundHandler } from '../src/core/middlewares/not-found.middleware.js';
 import { errorHandler } from '../src/core/middlewares/error.middleware.js';
 import { prisma } from '../src/core/database/prisma.js';
+import { assertTestDatabase } from './test-helper.js';
 import { Role } from '../src/generated/prisma/enums.js';
 import { authenticate, authorizeRoles } from '../src/modules/auth/auth.middleware.js';
 
@@ -33,6 +34,7 @@ describe('Authentication & Authorization Integration Tests', () => {
   };
 
   before(async () => {
+    await assertTestDatabase();
     const testApp = express();
     testApp.use(express.json());
 
