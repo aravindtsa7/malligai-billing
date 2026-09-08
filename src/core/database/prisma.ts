@@ -4,8 +4,7 @@ import { PrismaClient } from '../../generated/prisma/client.js';
 
 const isTest =
   process.env.NODE_ENV === 'test' ||
-  process.env.npm_lifecycle_event === 'test' ||
-  process.argv.some((arg) => arg.includes('test'));
+  process.env.npm_lifecycle_event === 'test';
 
 if (isTest && process.env.NODE_ENV !== 'test') {
   process.env.NODE_ENV = 'test';

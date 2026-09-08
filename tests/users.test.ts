@@ -99,6 +99,7 @@ describe('User Management Integration Tests (Phase 5)', () => {
   });
 
   after(async () => {
+    await assertTestDatabase();
     // Clean up test data
     await prisma.billItem.deleteMany({
       where: {

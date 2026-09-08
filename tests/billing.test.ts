@@ -135,6 +135,7 @@ describe('Billing Module & Automatic Stock Deduction Integration Tests', () => {
   });
 
   after(async () => {
+    await assertTestDatabase();
     await prisma.billItem.deleteMany({});
     await prisma.stockTransaction.deleteMany({});
     await prisma.bill.deleteMany({});

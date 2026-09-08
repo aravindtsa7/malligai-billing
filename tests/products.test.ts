@@ -122,6 +122,7 @@ describe('Product and Stock Foundation Integration Tests', () => {
   });
 
   after(async () => {
+    await assertTestDatabase();
     await prisma.stockTransaction.deleteMany({});
     await prisma.product.deleteMany({});
     await prisma.user.deleteMany({

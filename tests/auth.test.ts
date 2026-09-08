@@ -113,6 +113,7 @@ describe('Authentication & Authorization Integration Tests', () => {
   });
 
   after(async () => {
+    await assertTestDatabase();
     // Clean up test users
     await prisma.user.deleteMany({
       where: {

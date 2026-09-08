@@ -36,6 +36,27 @@ describe('Product Label Printing & Cross-Column Collision Integration Tests', ()
   let inactiveProductId: number;
   let leadingZeroProductId: number;
 
+  async function assertProductScanNamespaceInvariant(): Promise<void> {
+    const crossRowCollisions = await prisma.$queryRaw<Array<{ left_id: number; right_id: number }>>`
+      SELECT left_product.id AS left_id, right_product.id AS right_id
+      FROM products AS left_product
+      INNER JOIN products AS right_product
+        ON left_product.id <> right_product.id
+       AND left_product.product_code = right_product.barcode
+      LIMIT 1
+    `;
+    const selfCollisions = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id
+      FROM products
+      WHERE barcode IS NOT NULL
+        AND product_code = barcode
+      LIMIT 1
+    `;
+
+    assert.deepStrictEqual(crossRowCollisions, [], 'No productCode may equal another product barcode');
+    assert.deepStrictEqual(selfCollisions, [], 'A productCode may not equal its own barcode');
+  }
+
   before(async () => {
     await assertTestDatabase();
     const testApp = express();
@@ -224,6 +245,7 @@ describe('Product Label Printing & Cross-Column Collision Integration Tests', ()
   });
 
   after(async () => {
+    await assertTestDatabase();
     await prisma.stockTransaction.deleteMany({});
     await prisma.billItem.deleteMany({});
     await prisma.bill.deleteMany({});
@@ -492,6 +514,224 @@ describe('Product Label Printing & Cross-Column Collision Integration Tests', ()
     });
   });
 
+  describe('SCAN NAMESPACE CONCURRENCY', () => {
+    it('concurrent create/create cannot commit a cross-column collision', async () => {
+      const createCodeRequest = fetch(`${baseUrl}/api/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productCode: 'RACE-A',
+          productName: 'Race Create Code',
+          categoryId: defaultCategoryId,
+          unit: Unit.PIECE,
+          mrpRate: '10.00',
+          normalRate: '9.00',
+        }),
+      });
+      const createBarcodeRequest = fetch(`${baseUrl}/api/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productCode: 'RACE-B',
+          barcode: 'RACE-A',
+          productName: 'Race Create Barcode',
+          categoryId: defaultCategoryId,
+          unit: Unit.PIECE,
+          mrpRate: '10.00',
+          normalRate: '9.00',
+        }),
+      });
+
+      const responses = await Promise.all([createCodeRequest, createBarcodeRequest]);
+      assert.deepStrictEqual(
+        responses.map((response) => response.status).sort(),
+        [201, 409]
+      );
+      await assertProductScanNamespaceInvariant();
+    });
+
+    it('concurrent create/update cannot commit a cross-column collision', async () => {
+      const updateTarget = await prisma.product.create({
+        data: {
+          productCode: 'RACE-C-EXISTING',
+          productName: 'Race Create Update Target',
+          categoryId: defaultCategoryId,
+          unit: Unit.PIECE,
+          mrpRate: '10.00',
+          normalRate: '9.00',
+        },
+      });
+
+      const createRequest = fetch(`${baseUrl}/api/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productCode: 'RACE-C',
+          productName: 'Race Create Update Creator',
+          categoryId: defaultCategoryId,
+          unit: Unit.PIECE,
+          mrpRate: '10.00',
+          normalRate: '9.00',
+        }),
+      });
+      const updateRequest = fetch(`${baseUrl}/api/products/${updateTarget.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ barcode: 'RACE-C' }),
+      });
+
+      const responses = await Promise.all([createRequest, updateRequest]);
+      assert.deepStrictEqual(
+        responses.map((response) => response.status).sort(),
+        [201, 409]
+      );
+      await assertProductScanNamespaceInvariant();
+    });
+
+    it('concurrent update/update cannot commit a cross-column collision', async () => {
+      const [codeTarget, barcodeTarget] = await Promise.all([
+        prisma.product.create({
+          data: {
+            productCode: 'RACE-D-CODE-TARGET',
+            productName: 'Race Update Code Target',
+            categoryId: defaultCategoryId,
+            unit: Unit.PIECE,
+            mrpRate: '10.00',
+            normalRate: '9.00',
+          },
+        }),
+        prisma.product.create({
+          data: {
+            productCode: 'RACE-D-BARCODE-TARGET',
+            productName: 'Race Update Barcode Target',
+            categoryId: defaultCategoryId,
+            unit: Unit.PIECE,
+            mrpRate: '10.00',
+            normalRate: '9.00',
+          },
+        }),
+      ]);
+
+      const codeUpdateRequest = fetch(`${baseUrl}/api/products/${codeTarget.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ productCode: 'RACE-D' }),
+      });
+      const barcodeUpdateRequest = fetch(`${baseUrl}/api/products/${barcodeTarget.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ barcode: 'RACE-D' }),
+      });
+
+      const responses = await Promise.all([codeUpdateRequest, barcodeUpdateRequest]);
+      assert.deepStrictEqual(
+        responses.map((response) => response.status).sort(),
+        [200, 409]
+      );
+      await assertProductScanNamespaceInvariant();
+    });
+
+    it('validates and writes both final scan fields together', async () => {
+      const target = await prisma.product.create({
+        data: {
+          productCode: 'FINAL-OLD-CODE',
+          barcode: 'FINAL-OLD-BARCODE',
+          productName: 'Both Fields Target',
+          categoryId: defaultCategoryId,
+          unit: Unit.PIECE,
+          mrpRate: '10.00',
+          normalRate: '9.00',
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/api/products/${target.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productCode: 'FINAL-NEW-CODE',
+          barcode: 'FINAL-NEW-BARCODE',
+        }),
+      });
+
+      assert.strictEqual(response.status, 200);
+      const committed = await prisma.product.findUniqueOrThrow({ where: { id: target.id } });
+      assert.strictEqual(committed.productCode, 'FINAL-NEW-CODE');
+      assert.strictEqual(committed.barcode, 'FINAL-NEW-BARCODE');
+      await assertProductScanNamespaceInvariant();
+    });
+
+    it('rejects a productCode/barcode self collision', async () => {
+      const response = await fetch(`${baseUrl}/api/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          productCode: 'SAME',
+          barcode: 'SAME',
+          productName: 'Self Collision',
+          categoryId: defaultCategoryId,
+          unit: Unit.PIECE,
+          mrpRate: '10.00',
+          normalRate: '9.00',
+        }),
+      });
+
+      assert.strictEqual(response.status, 409);
+      await assertProductScanNamespaceInvariant();
+    });
+
+    it('clears a barcode supplied as a blank string', async () => {
+      const target = await prisma.product.create({
+        data: {
+          productCode: 'BLANK-BARCODE-CODE',
+          barcode: 'BLANK-BARCODE-OLD',
+          productName: 'Blank Barcode Target',
+          categoryId: defaultCategoryId,
+          unit: Unit.PIECE,
+          mrpRate: '10.00',
+          normalRate: '9.00',
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/api/products/${target.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ barcode: '   ' }),
+      });
+
+      assert.strictEqual(response.status, 200);
+      const committed = await prisma.product.findUniqueOrThrow({ where: { id: target.id } });
+      assert.strictEqual(committed.barcode, null);
+      await assertProductScanNamespaceInvariant();
+    });
+  });
+
   describe('LABEL SETTINGS (GET & PUT /api/label-settings)', () => {
     it('17. default singleton read', async () => {
       const res = await fetch(`${baseUrl}/api/label-settings`, {
@@ -618,6 +858,28 @@ describe('Product Label Printing & Cross-Column Collision Integration Tests', ()
       const body = await res.json();
       assert.strictEqual(res.status, 400);
       assert.strictEqual(body.success, false);
+    });
+
+    it('recovers the id=1 singleton atomically under concurrent GET requests', async () => {
+      await assertTestDatabase();
+      await prisma.labelSettings.deleteMany({});
+
+      const [first, second] = await Promise.all([
+        fetch(`${baseUrl}/api/label-settings`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        }),
+        fetch(`${baseUrl}/api/label-settings`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        }),
+      ]);
+
+      assert.strictEqual(first.status, 200);
+      assert.strictEqual(second.status, 200);
+      const rows = await prisma.labelSettings.findMany();
+      assert.strictEqual(rows.length, 1);
+      assert.strictEqual(rows[0].id, 1);
+      assert.strictEqual(rows[0].storeName, 'MALLIGAI');
+      assert.strictEqual(rows[0].defaultLabelSize, LabelSize.LABEL_50X40);
     });
   });
 });

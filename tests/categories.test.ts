@@ -141,6 +141,7 @@ describe('Category Master & Product Integration Tests (V1.1)', () => {
   });
 
   after(async () => {
+    await assertTestDatabase();
     await prisma.billItem.deleteMany({});
     await prisma.stockTransaction.deleteMany({});
     await prisma.bill.deleteMany({});

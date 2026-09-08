@@ -149,6 +149,7 @@ describe('Malligai Billing Backend V1.2 Integration Tests (Receipt Settings, Sna
   });
 
   after(async () => {
+    await assertTestDatabase();
     await prisma.$disconnect();
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
