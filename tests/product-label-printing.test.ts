@@ -9,6 +9,7 @@ import labelSettingsRoutes from '../src/modules/label-settings/label-settings.ro
 import { notFoundHandler } from '../src/core/middlewares/not-found.middleware.js';
 import { errorHandler } from '../src/core/middlewares/error.middleware.js';
 import { prisma } from '../src/core/database/prisma.js';
+import { assertTestDatabase } from './test-helper.js';
 import { Role, Unit, LabelSize } from '../src/generated/prisma/enums.js';
 
 describe('Product Label Printing & Cross-Column Collision Integration Tests', () => {
@@ -57,6 +58,7 @@ describe('Product Label Printing & Cross-Column Collision Integration Tests', ()
   }
 
   before(async () => {
+    await assertTestDatabase();
     const testApp = express();
     testApp.use(express.json());
 
@@ -243,6 +245,7 @@ describe('Product Label Printing & Cross-Column Collision Integration Tests', ()
   });
 
   after(async () => {
+    await assertTestDatabase();
     await prisma.stockTransaction.deleteMany({});
     await prisma.billItem.deleteMany({});
     await prisma.bill.deleteMany({});
@@ -858,6 +861,7 @@ describe('Product Label Printing & Cross-Column Collision Integration Tests', ()
     });
 
     it('recovers the id=1 singleton atomically under concurrent GET requests', async () => {
+      await assertTestDatabase();
       await prisma.labelSettings.deleteMany({});
 
       const [first, second] = await Promise.all([

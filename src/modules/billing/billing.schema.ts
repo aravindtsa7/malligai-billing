@@ -12,9 +12,35 @@ const positiveQuantityDecimal = z
   )
   .transform((val) => String(val));
 
+const optionalMoneyDecimal = z
+  .union([
+    z.string().trim(),
+    z
+      .number()
+      .refine((n) => Number.isFinite(n) && !isNaN(n), { message: 'Must be a finite number' })
+      .transform((n) => String(n)),
+  ])
+  .optional()
+  .refine(
+    (val) => {
+      if (val === undefined) return true;
+      return /^\d{1,10}(\.\d{1,2})?$/.test(val);
+    },
+    { message: 'expectedUnitRate must be a valid money decimal string' }
+  );
+
 export const billItemInputSchema = z.object({
   productId: z.number().int().positive('Product ID must be a positive integer'),
   quantity: positiveQuantityDecimal,
+  expectedUnitRate: optionalMoneyDecimal,
+  unitRateOverride: z
+    .string({ message: 'unitRateOverride must be a string' })
+    .trim()
+    .regex(
+      /^(?!0+(\.0{1,2})?$)\d{1,10}(\.\d{1,2})?$/,
+      'unitRateOverride must be a positive decimal string with up to 2 decimal places'
+    )
+    .optional(),
 });
 
 export const createBillSchema = z

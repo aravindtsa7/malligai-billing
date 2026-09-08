@@ -88,16 +88,45 @@ export class BillingService {
       for (const item of input.items) {
         const prod = productMap.get(item.productId)!;
 
-        let rateDec: Prisma.Decimal;
+        let masterRateDec: Prisma.Decimal;
         if (input.rateType === RateType.NORMAL) {
-          rateDec = new Prisma.Decimal(String(prod.normal_rate));
+          masterRateDec = new Prisma.Decimal(String(prod.normal_rate));
         } else if (input.rateType === RateType.RETAIL) {
-          rateDec = new Prisma.Decimal(String(prod.retail_rate));
+          masterRateDec = new Prisma.Decimal(String(prod.retail_rate));
         } else if (input.rateType === RateType.FUNCTION) {
-          rateDec = new Prisma.Decimal(String(prod.function_rate));
+          masterRateDec = new Prisma.Decimal(String(prod.function_rate));
         } else {
           throw new BadRequestError(`Unsupported rate type: ${input.rateType}`);
         }
+
+        let rateDec: Prisma.Decimal;
+
+        if (item.unitRateOverride !== undefined) {
+          // Explicit current-bill override is the intended sale price for THIS line in THIS bill
+          rateDec = new Prisma.Decimal(item.unitRateOverride);
+        } else {
+          // Authoritative Product Master rate
+          rateDec = masterRateDec;
+
+          // Non-overridden stale-master-rate protection
+          if (item.expectedUnitRate !== undefined) {
+            const expectedRateDec = new Prisma.Decimal(item.expectedUnitRate);
+            if (!masterRateDec.equals(expectedRateDec)) {
+              throw new ConflictError(
+                `Rate for product "${prod.product_name}" has changed. Expected ${expectedRateDec.toFixed(2)}, authoritative current rate is ${masterRateDec.toFixed(2)}.`,
+                {
+                  code: 'RATE_CHANGED',
+                  productId: prod.id,
+                  productName: prod.product_name,
+                  expectedUnitRate: expectedRateDec.toFixed(2),
+                  currentRate: masterRateDec.toFixed(2),
+                  rateType: input.rateType,
+                }
+              );
+            }
+          }
+        }
+
 
         const qtyDec = new Prisma.Decimal(item.quantity);
         const itemAmountDec = rateDec.mul(qtyDec);
